@@ -1,5 +1,37 @@
+# Environment
 .env
-vectorstore/
-__pycache__/
-*.pyc
+.env.local
+
+# Virtual environment
 venv/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# FAISS vectorstore (auto-generated, don't commit)
+vectorstore/
+
+# Streamlit cache
+.streamlit/cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
