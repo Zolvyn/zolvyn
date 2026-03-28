@@ -1,398 +1,326 @@
-import os
 import streamlit as st
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not required if env vars are set another way
 
-# ── Load .env FIRST ────────────────────────────────────────────────────────
-load_dotenv()
-
-if not os.getenv("GROQ_API_KEY"):
-    st.error("⚠️ GROQ_API_KEY missing! Add it to your .env file: GROQ_API_KEY=your_key_here")
-    st.stop()
-
-# ── Page Config ─────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AI Legal Intelligence System",
+    page_title="Zolvyn AI — Smart Legal Companion",
     page_icon="⚖️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# ── YOUR ORIGINAL DARK GOLD CSS (preserved + enhanced) ──────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-    background-color: #0a0f1e;
-    color: #e8e0d0;
+*, html, body, [class*="css"] {
+    font-family: 'DM Sans', sans-serif;
+    background-color: #07090f;
+    color: #ddd6c8;
 }
-
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 0 !important;
     padding-bottom: 2rem !important;
-    max-width: 1200px !important;
+    max-width: 1280px !important;
 }
 
-/* ── HEADER ── */
-.header-bar {
-    background: linear-gradient(135deg, #0d1b2a 0%, #1a2f4e 50%, #0d1b2a 100%);
-    border-bottom: 2px solid #c9a84c;
-    padding: 22px 40px;
-    margin: -1rem -1rem 2rem -1rem;
-    text-align: center;
+/* HERO HEADER */
+.zolvyn-header {
+    background: linear-gradient(160deg, #060a14 0%, #0d1c35 45%, #060a14 100%);
+    border-bottom: 1px solid rgba(201,168,76,0.3);
+    padding: 28px 48px 22px;
+    margin: -1rem -1rem 0 -1rem;
+    position: relative;
+    overflow: hidden;
 }
-.header-title {
-    font-family: 'Playfair Display', serif;
-    font-size: 2rem;
-    font-weight: 700;
-    color: #c9a84c;
-    letter-spacing: 1px;
+.zolvyn-header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse 60% 100% at 50% 0%, rgba(201,168,76,0.07) 0%, transparent 70%);
+    pointer-events: none;
 }
-.header-subtitle {
-    font-size: 0.78rem;
-    color: #8a9bb5;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    margin-top: 4px;
+.zolvyn-header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.zolvyn-logo-block {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.zolvyn-emblem {
+    width: 46px; height: 46px;
+    background: linear-gradient(135deg, #c9a84c, #f0d680);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+    box-shadow: 0 0 24px rgba(201,168,76,0.35);
+}
+.zolvyn-brand {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.85rem; font-weight: 700;
+    color: #c9a84c; letter-spacing: 1px; line-height: 1;
+}
+.zolvyn-tagline {
+    font-size: 0.7rem; color: #6a7f9a;
+    letter-spacing: 3px; text-transform: uppercase; margin-top: 3px;
+}
+.zolvyn-badge {
+    background: rgba(201,168,76,0.1);
+    border: 1px solid rgba(201,168,76,0.25);
+    border-radius: 20px; padding: 5px 14px;
+    font-size: 0.7rem; color: #c9a84c;
+    letter-spacing: 2px; text-transform: uppercase;
 }
 
-/* ── SECTION TITLES ── */
-.section-title {
-    font-family: 'Playfair Display', serif;
-    font-size: 1.6rem;
-    color: #c9a84c;
-    font-weight: 700;
-    margin-bottom: 0.3rem;
+/* NAV */
+.nav-wrap {
+    background: rgba(13,28,53,0.6);
+    border-bottom: 1px solid rgba(201,168,76,0.1);
+    padding: 10px 0;
+    margin: 0 -1rem 2rem -1rem;
 }
-.section-divider {
-    height: 2px;
-    background: linear-gradient(90deg, #c9a84c, transparent);
-    margin-bottom: 1.5rem;
-    border-radius: 2px;
-}
-
-/* ── HOME CARDS ── */
-.stat-card {
-    background: linear-gradient(135deg, #0d1b2a, #1a2f4e);
-    border: 1px solid #1e3a5f;
-    border-top: 3px solid #c9a84c;
-    border-radius: 12px;
-    padding: 24px;
-    text-align: center;
-    height: 180px;
-    transition: transform 0.2s;
-}
-.stat-card:hover { transform: translateY(-3px); }
-.stat-icon { font-size: 2.2rem; margin-bottom: 10px; }
-.stat-title {
-    font-family: 'Playfair Display', serif;
-    font-size: 1rem;
-    color: #c9a84c;
-    font-weight: 600;
-    margin-bottom: 6px;
-}
-.stat-desc { font-size: 0.78rem; color: #6b7f99; line-height: 1.5; }
-
-/* ── NAV BUTTONS ── */
 div[data-testid="column"] .stButton > button {
-    background: #0d1b2a !important;
-    border: 1px solid #c9a84c !important;
-    color: #c9a84c !important;
-    border-radius: 10px !important;
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
-    width: 100% !important;
-    height: 50px !important;
-    white-space: normal !important;
-    line-height: 1.2 !important;
+    background: transparent !important;
+    border: 1px solid rgba(201,168,76,0.18) !important;
+    color: #8a9bb5 !important;
+    border-radius: 8px !important;
+    font-size: 0.8rem !important; font-weight: 500 !important;
+    width: 100% !important; height: 44px !important;
+    transition: all 0.2s ease !important; letter-spacing: 0.3px !important;
 }
 div[data-testid="column"] .stButton > button:hover {
-    background: #c9a84c !important;
-    color: #0a0f1e !important;
+    background: rgba(201,168,76,0.08) !important;
+    border-color: #c9a84c !important; color: #c9a84c !important;
 }
 
-/* ── ACTION BUTTONS ── */
+/* ACTION BUTTONS */
 .stButton > button {
-    background: linear-gradient(135deg, #c9a84c, #e8c96d) !important;
-    color: #0a0f1e !important;
-    border: none !important;
-    border-radius: 8px !important;
-    padding: 10px 28px !important;
-    font-weight: 600 !important;
-    font-size: 0.9rem !important;
-    width: 100% !important;
+    background: linear-gradient(135deg, #c9a84c 0%, #e8c96d 100%) !important;
+    color: #07090f !important; border: none !important;
+    border-radius: 8px !important; padding: 10px 28px !important;
+    font-weight: 600 !important; font-size: 0.88rem !important;
+    width: 100% !important; letter-spacing: 0.2px !important;
+    transition: all 0.2s ease !important;
 }
 .stButton > button:hover {
-    box-shadow: 0 4px 15px rgba(201,168,76,0.4) !important;
+    box-shadow: 0 4px 20px rgba(201,168,76,0.4) !important;
+    transform: translateY(-1px) !important;
 }
 
-/* ── INPUT LABELS ── */
-.stTextInput > label,
-.stTextArea > label,
-.stSelectbox > label,
-.stDateInput > label,
-.stRadio > label {
-    color: #c9a84c !important;
-    font-size: 0.85rem !important;
-    font-weight: 500 !important;
+/* SECTION HEADERS */
+.section-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.9rem; color: #c9a84c; font-weight: 700;
+    margin-bottom: 0.25rem; letter-spacing: 0.3px;
+}
+.section-line {
+    height: 1px;
+    background: linear-gradient(90deg, #c9a84c 0%, rgba(201,168,76,0.1) 60%, transparent 100%);
+    margin-bottom: 1.75rem; border-radius: 1px;
 }
 
-/* ── INPUT BOXES ── */
+/* HOME FEATURE CARDS */
+.feature-card {
+    background: linear-gradient(145deg, #0d1c35 0%, #0a1526 100%);
+    border: 1px solid rgba(201,168,76,0.12);
+    border-top: 2px solid #c9a84c;
+    border-radius: 14px; padding: 28px 22px; height: 210px;
+    transition: all 0.25s ease; position: relative; overflow: hidden;
+}
+.feature-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(201,168,76,0.35);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+.card-icon { font-size: 2.4rem; margin-bottom: 12px; }
+.card-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.1rem; color: #c9a84c; font-weight: 600; margin-bottom: 8px;
+}
+.card-desc { font-size: 0.78rem; color: #5a6f8a; line-height: 1.6; }
+
+/* STATS ROW */
+.stat-row {
+    display: flex; gap: 0;
+    background: rgba(13,28,53,0.4);
+    border: 1px solid rgba(201,168,76,0.1);
+    border-radius: 12px; overflow: hidden; margin-top: 1.5rem;
+}
+.stat-item {
+    flex: 1; padding: 18px; text-align: center;
+    border-right: 1px solid rgba(201,168,76,0.08);
+}
+.stat-item:last-child { border-right: none; }
+.stat-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.8rem; color: #c9a84c; font-weight: 700;
+}
+.stat-lbl { font-size: 0.68rem; color: #4a6070; letter-spacing: 2px; text-transform: uppercase; }
+
+/* DISCLAIMER */
+.disclaimer-box {
+    background: rgba(13,28,53,0.5);
+    border: 1px solid rgba(201,168,76,0.12);
+    border-left: 3px solid #c9a84c;
+    border-radius: 10px; padding: 16px 20px; margin-top: 1.5rem;
+}
+
+/* INPUTS */
+.stTextInput > label, .stTextArea > label,
+.stSelectbox > label, .stDateInput > label, .stFileUploader > label {
+    color: #c9a84c !important; font-size: 0.82rem !important;
+    font-weight: 500 !important; letter-spacing: 0.3px !important;
+}
 .stTextInput > div > div > input {
-    background-color: #ffffff !important;
-    border: 1px solid #c9a84c !important;
-    border-radius: 8px !important;
-    color: #000000 !important;
-    font-size: 0.9rem !important;
-    padding: 10px !important;
+    background-color: #0d1c35 !important;
+    border: 1px solid rgba(201,168,76,0.25) !important;
+    border-radius: 8px !important; color: #ddd6c8 !important;
+    font-size: 0.9rem !important; padding: 10px 14px !important;
+}
+.stTextInput > div > div > input:focus {
+    border-color: #c9a84c !important;
+    box-shadow: 0 0 0 2px rgba(201,168,76,0.12) !important;
 }
 .stTextArea > div > div > textarea {
-    background-color: #ffffff !important;
-    border: 1px solid #c9a84c !important;
-    border-radius: 8px !important;
-    color: #000000 !important;
-    font-size: 0.9rem !important;
-    padding: 10px !important;
+    background-color: #0d1c35 !important;
+    border: 1px solid rgba(201,168,76,0.25) !important;
+    border-radius: 8px !important; color: #ddd6c8 !important;
+    font-size: 0.9rem !important; padding: 10px 14px !important;
 }
 .stSelectbox > div > div {
-    background-color: #ffffff !important;
-    border: 1px solid #c9a84c !important;
-    border-radius: 8px !important;
-    color: #000000 !important;
+    background-color: #0d1c35 !important;
+    border: 1px solid rgba(201,168,76,0.25) !important;
+    border-radius: 8px !important; color: #ddd6c8 !important;
 }
-input::placeholder, textarea::placeholder { color: #999999 !important; }
-
-/* ── FILE UPLOADER ── */
+input::placeholder, textarea::placeholder { color: #3a5070 !important; }
 .stFileUploader > div {
-    background: #0d1b2a !important;
-    border: 2px dashed #c9a84c !important;
+    background: #0d1c35 !important;
+    border: 2px dashed rgba(201,168,76,0.3) !important;
     border-radius: 12px !important;
 }
 
-/* ── TABS ── */
-.stTabs [data-baseweb="tab-list"] {
-    background-color: #0d1b2a;
-    border-bottom: 2px solid #1e3a5f;
-}
-.stTabs [data-baseweb="tab"] {
-    color: #8a9bb5 !important;
-    font-weight: 500;
-}
-.stTabs [aria-selected="true"] {
-    color: #c9a84c !important;
-    border-bottom: 2px solid #c9a84c !important;
-}
-
-/* ── RESULT BOX ── */
-.result-box {
-    background: linear-gradient(135deg, #0d1b2a, #1a2f4e);
-    border: 1px solid #1e3a5f;
-    border-left: 4px solid #c9a84c;
-    border-radius: 10px;
-    padding: 1.5rem;
-    margin-top: 1rem;
-    color: #e8e0d0;
-    white-space: pre-wrap;
-    line-height: 1.8;
-}
-
-/* ── EXPANDER ── */
-.streamlit-expanderHeader {
-    background-color: #0d1b2a !important;
-    color: #c9a84c !important;
-    border: 1px solid #1e3a5f !important;
-    border-radius: 8px !important;
-}
-
-/* ── DOWNLOAD BUTTON ── */
-.stDownloadButton > button {
-    background: #0d1b2a !important;
-    border: 1px solid #c9a84c !important;
-    color: #c9a84c !important;
-    border-radius: 8px !important;
-    font-size: 0.85rem !important;
-    margin-top: 0.5rem;
-}
-
-/* ── FOOTER ── */
-.law-footer {
-    text-align: center;
-    padding: 20px;
-    color: #3a4f6b;
-    font-size: 0.72rem;
-    border-top: 1px solid #1e3a5f;
-    margin-top: 3rem;
-    letter-spacing: 1.5px;
-}
-
-/* ── STATUS BADGE ── */
-.badge-success {
-    background: #1a4731;
-    color: #4ade80;
-    border: 1px solid #166534;
-    border-radius: 20px;
-    padding: 3px 12px;
-    font-size: 0.78rem;
-    display: inline-block;
-}
-.badge-error {
-    background: #450a0a;
-    color: #f87171;
-    border: 1px solid #7f1d1d;
-    border-radius: 20px;
-    padding: 3px 12px;
-    font-size: 0.78rem;
-    display: inline-block;
+/* FOOTER */
+.zolvyn-footer {
+    text-align: center; padding: 24px; color: #2a3f5a;
+    font-size: 0.68rem; border-top: 1px solid rgba(201,168,76,0.08);
+    margin-top: 3rem; letter-spacing: 2px; text-transform: uppercase;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ── HEADER (your original style) ────────────────────────────────────────────
+# ─── HEADER ───────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class="header-bar">
-    <div class="header-title">⚖️ AI Legal Intelligence System</div>
-    <div class="header-subtitle">Your Smart Legal Companion for Indian Law &nbsp;·&nbsp; Powered by Groq &nbsp;·&nbsp; llama-3.3-70b-versatile</div>
+<div class="zolvyn-header">
+  <div class="zolvyn-header-inner">
+    <div class="zolvyn-logo-block">
+      <div class="zolvyn-emblem">⚖️</div>
+      <div>
+        <div class="zolvyn-brand">Zolvyn AI</div>
+        <div class="zolvyn-tagline">Your Smart Legal Companion, Anywhere in India</div>
+      </div>
+    </div>
+    <div class="zolvyn-badge">⚡ AI Powered</div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── NAV (your original top button style) ────────────────────────────────────
+# ─── NAVIGATION ───────────────────────────────────────────────────────────────
+st.markdown('<div class="nav-wrap">', unsafe_allow_html=True)
 if "page" not in st.session_state:
     st.session_state.page = "Home"
 
 c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 1])
 with c1:
-    if st.button("🏠 Home"):        st.session_state.page = "Home"
+    if st.button("🏠 Home"): st.session_state.page = "Home"
 with c2:
-    if st.button("📖 Legal Q&A"):   st.session_state.page = "Legal Q&A"
+    if st.button("📖 Legal Q&A"): st.session_state.page = "Legal Q&A"
 with c3:
-    if st.button("📄 Contracts"):   st.session_state.page = "Contract Analyzer"
+    if st.button("📄 Contracts"): st.session_state.page = "Contract Analyzer"
 with c4:
-    if st.button("📝 Documents"):   st.session_state.page = "Document Generator"
+    if st.button("📝 Documents"): st.session_state.page = "Document Generator"
 with c5:
-    if st.button("🔮 Predictor"):   st.session_state.page = "Case Predictor"
-
-st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+    if st.button("🔮 Predictor"): st.session_state.page = "Case Predictor"
+st.markdown('</div>', unsafe_allow_html=True)
 
 page = st.session_state.page
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HOME
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── HOME ─────────────────────────────────────────────────────────────────────
 if page == "Home":
-    st.markdown('<div class="section-title">Welcome to AI Legal Intelligence</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-    st.markdown("##### Instant legal guidance powered by AI — accessible to everyone, anywhere in India.")
+    st.markdown('<div class="section-title">Welcome to Zolvyn AI</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-line"></div>', unsafe_allow_html=True)
+    st.markdown("##### AI-powered legal intelligence — instant, private, and accessible to every Indian citizen.")
     st.markdown("")
 
     c1, c2, c3, c4 = st.columns(4)
     cards = [
-        ("📖", "Legal Q&A",           "Ask any legal question — RAG pipeline searches Indian law documents for accurate answers."),
-        ("📄", "Contract Analyzer",   "Paste any contract for instant clause-by-clause risk analysis, key terms & improvement tips."),
-        ("📝", "Document Generator",  "Generate NDAs, rental agreements, employment contracts, legal notices instantly."),
-        ("🔮", "Case Predictor",      "Describe your situation and get AI-powered outcome prediction with legal strategy.")
+        ("📖", "Legal Q&A", "Ask anything about Indian law. Our RAG engine retrieves answers directly from legal documents."),
+        ("📄", "Contract Analyzer", "Upload any contract PDF. Get instant clause-by-clause risk analysis and red flags."),
+        ("📝", "Document Generator", "Generate NDAs, Rental Agreements, Employment Contracts and more — download as PDF."),
+        ("🔮", "Case Predictor", "Describe your legal situation. Get an AI-powered outcome prediction under Indian law."),
     ]
     for col, (icon, title, desc) in zip([c1, c2, c3, c4], cards):
         with col:
             st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-icon">{icon}</div>
-                <div class="stat-title">{title}</div>
-                <div class="stat-desc">{desc}</div>
+            <div class="feature-card">
+                <div class="card-icon">{icon}</div>
+                <div class="card-title">{title}</div>
+                <div class="card-desc">{desc}</div>
             </div>
             """, unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Tech stack badges
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #0d1b2a, #1a2f4e);
-            border: 1px solid #1e3a5f; border-left: 4px solid #c9a84c;
-            border-radius: 12px; padding: 20px; margin-top: 1rem;">
-            <div style="color:#c9a84c; font-weight:600; margin-bottom:10px; font-size:1rem;">🛠️ Tech Stack</div>
-            <div style="color:#8a9bb5; font-size:0.82rem; line-height:2;">
-                ⚡ <b style="color:#c9a84c;">Groq</b> · llama-3.3-70b-versatile (128K context)<br>
-                🔍 <b style="color:#c9a84c;">LangChain + FAISS</b> · RAG pipeline<br>
-                🤗 <b style="color:#c9a84c;">HuggingFace</b> · sentence-transformers embeddings<br>
-                🐍 <b style="color:#c9a84c;">Python + Streamlit</b> · UI framework<br>
-                🔐 <b style="color:#c9a84c;">python-dotenv</b> · Secure API key management
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #0d1b2a, #1a2f4e);
-            border: 1px solid #1e3a5f; border-left: 4px solid #c9a84c;
-            border-radius: 12px; padding: 20px; margin-top: 1rem;">
-            <div style="color:#c9a84c; font-weight:600; margin-bottom:10px; font-size:1rem;">📦 Coverage Areas</div>
-            <div style="color:#8a9bb5; font-size:0.82rem; line-height:2;">
-                ⚖️ Civil, Criminal & Family Law<br>
-                🏠 Property & Tenancy Disputes<br>
-                💼 Corporate & Employment Law<br>
-                🛡️ Consumer Protection & RTI<br>
-                📋 Contract Drafting & Analysis<br>
-                🔮 Case Outcome Prediction
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #0d1b2a, #1a2f4e);
-        border: 1px solid #1e3a5f; border-left: 4px solid #c9a84c;
-        border-radius: 12px; padding: 20px; margin-top: 1.5rem;">
-        <span style="color:#c9a84c; font-weight:600;">⚠️ Disclaimer: </span>
-        <span style="color:#8a9bb5; font-size:0.85rem;">
-            This system provides AI-generated legal information for educational purposes only.
-            It is not a substitute for professional legal advice. Always consult a qualified lawyer for specific matters.
+    <div class="stat-row">
+        <div class="stat-item"><div class="stat-num">4</div><div class="stat-lbl">AI Modules</div></div>
+        <div class="stat-item"><div class="stat-num">∞</div><div class="stat-lbl">Questions Answered</div></div>
+        <div class="stat-item"><div class="stat-num">100%</div><div class="stat-lbl">Anonymous</div></div>
+        <div class="stat-item"><div class="stat-num">🇮🇳 India</div><div class="stat-lbl">Jurisdiction</div></div>
+    </div>
+    <div class="disclaimer-box">
+        <span style="color:#c9a84c;font-weight:600;font-size:0.85rem;">⚠️ Disclaimer &nbsp;</span>
+        <span style="color:#5a7090;font-size:0.82rem;">
+            Zolvyn AI provides AI-generated legal information for educational purposes only.
+            It is not a substitute for professional legal advice. Always consult a qualified lawyer for your specific situation.
         </span>
     </div>
     """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LEGAL Q&A
-# ─────────────────────────────────────────────────────────────────────────────
 elif page == "Legal Q&A":
     st.markdown('<div class="section-title">📖 Legal Q&A Assistant</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-line"></div>', unsafe_allow_html=True)
     from legal_qa import legal_qa_ui
     legal_qa_ui()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CONTRACT ANALYZER
-# ─────────────────────────────────────────────────────────────────────────────
 elif page == "Contract Analyzer":
     st.markdown('<div class="section-title">📄 Contract Analyzer</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-line"></div>', unsafe_allow_html=True)
     from contract_analyzer import contract_analyzer_ui
     contract_analyzer_ui()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DOCUMENT GENERATOR
-# ─────────────────────────────────────────────────────────────────────────────
 elif page == "Document Generator":
     st.markdown('<div class="section-title">📝 Legal Document Generator</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-line"></div>', unsafe_allow_html=True)
     from doc_generator import doc_generator_ui
     doc_generator_ui()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CASE PREDICTOR
-# ─────────────────────────────────────────────────────────────────────────────
 elif page == "Case Predictor":
     st.markdown('<div class="section-title">🔮 Case Outcome Predictor</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-line"></div>', unsafe_allow_html=True)
     from case_predictor import case_predictor_ui
     case_predictor_ui()
 
-# ── FOOTER ──────────────────────────────────────────────────────────────────
+# ─── FOOTER ───────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class="law-footer">
-    AI LEGAL INTELLIGENCE SYSTEM &nbsp;|&nbsp; FOR EDUCATIONAL USE ONLY &nbsp;|&nbsp;
-    NOT A SUBSTITUTE FOR LEGAL ADVICE &nbsp;|&nbsp; BUILT BY VIVEK DUBEY
+<div class="zolvyn-footer">
+    Zolvyn AI &nbsp;·&nbsp; Smart Legal Companion &nbsp;·&nbsp; For Educational Use Only &nbsp;·&nbsp; Not a Substitute for Legal Advice
 </div>
 """, unsafe_allow_html=True)
