@@ -5,10 +5,25 @@ import streamlit as st
 from groq import Groq
 
 
+SYSTEM_PROMPT = """You are Zolvyn — a senior Indian contract lawyer and legal advisor with 25 years of expertise in contract law, corporate law, and dispute resolution. You've reviewed thousands of agreements across sectors — real estate, employment, technology, finance, and more.
+
+Your analysis style:
+- Think like a sharp legal eagle who has seen every trick in the book
+- Be direct and frank — if something is dangerous, say so clearly and explain WHY
+- Write like you're briefing a client who is intelligent but not a lawyer
+- Use natural, flowing language — not a checklist robot
+- When you spot a red flag, explain the real-world consequence ("This means they can fire you with no notice and no compensation")
+- When something is missing, explain what risk that creates
+- Give specific, actionable recommendations — not vague advice
+- Reference specific Indian laws, acts, and sections where relevant (Indian Contract Act 1872, Specific Relief Act, etc.)
+
+Your output format must follow the exact section headers given, but the content within should read like expert commentary — not a form to fill."""
+
+
 def get_client():
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        st.error("⚠️ GROQ_API_KEY not found. Add it to your .env file: GROQ_API_KEY=your_key_here")
+        st.error("⚠️ GROQ_API_KEY not set.")
         st.stop()
     return Groq(api_key=api_key)
 
@@ -28,187 +43,247 @@ def extract_text_from_pdf(uploaded_file):
 
 def analyze_contract(text):
     client = get_client()
-    truncated = text[:6000] if len(text) > 6000 else text
+    truncated = text[:7000] if len(text) > 7000 else text
+
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are Zolvyn AI — an expert legal contract analyzer specializing in Indian law. "
-                    "Provide structured, precise analysis. Be direct and actionable. "
-                    "Always assess risk as: HIGH RISK / MEDIUM RISK / LOW RISK."
-                )
-            },
+            {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"""Analyze this contract and provide a structured report:
+                "content": f"""Please analyze this contract thoroughly. I need your honest, expert assessment.
 
+First, give me:
 OVERALL RISK: [HIGH RISK / MEDIUM RISK / LOW RISK]
-RISK SCORE: [number out of 10]
+RISK SCORE: [1-10]
+CONTRACT TYPE: [what type of contract this is]
 
----
+Then analyze using these sections:
+
 📋 CONTRACT SUMMARY
-[2-3 sentence summary]
+Write 3-4 sentences covering: what this contract is, who the parties are, what they're agreeing to, and the overall nature of the relationship it creates. Write as if explaining to a client who just handed you the document.
 
----
 🚨 RED FLAGS
-[List red flags with bullet points]
+For each red flag, write it as: **[The specific issue]** — then a sentence explaining exactly what this means in plain terms and what real-world harm it could cause. Be frank and specific.
 
----
-✅ KEY CLAUSES
-[List key clauses present]
+✅ KEY PROTECTIVE CLAUSES
+Identify clauses that actually protect the person signing. Explain what each one does for them in simple terms.
 
----
-⚠️ MISSING TERMS
-[List missing standard clauses]
+⚠️ MISSING STANDARD CLAUSES
+For each gap, explain what's missing AND what risk this creates. A missing dispute resolution clause, for example, means costly court litigation if anything goes wrong.
 
----
-💡 RECOMMENDATIONS
-[Numbered recommendations]
+💡 NEGOTIATION RECOMMENDATIONS
+Give 4-6 specific, actionable recommendations. Not generic advice — specific changes they should push for before signing this particular contract.
 
----
-⚖️ INDIAN LAW APPLICABILITY
-[Relevant Indian laws and sections]
+⚖️ APPLICABLE INDIAN LAWS
+List the specific Indian laws, sections, and acts that govern this type of contract and are relevant to the issues found.
 
-Contract Text:
+🔮 BOTTOM LINE
+One direct paragraph: should they sign this as-is, negotiate first, or walk away? Be honest.
+
+Contract text:
 {truncated}"""
             }
         ],
-        max_tokens=2500,
-        temperature=0.2
+        max_tokens=3000,
+        temperature=0.3
     )
     return response.choices[0].message.content
 
 
-def parse_risk_level(analysis_text):
-    upper = analysis_text.upper()
+def parse_risk(text):
+    upper = text.upper()
+    level = "MEDIUM RISK"
     if "HIGH RISK" in upper:
-        risk_level = "HIGH RISK"
+        level = "HIGH RISK"
     elif "LOW RISK" in upper:
-        risk_level = "LOW RISK"
-    else:
-        risk_level = "MEDIUM RISK"
-    risk_score = 5
-    score_match = re.search(r'RISK SCORE[:\s]+(\d+)', analysis_text, re.IGNORECASE)
-    if score_match:
-        risk_score = min(10, max(1, int(score_match.group(1))))
-    return risk_level, risk_score
+        level = "LOW RISK"
+    score = 5
+    m = re.search(r'RISK SCORE[:\s]+(\d+)', text, re.IGNORECASE)
+    if m:
+        score = min(10, max(1, int(m.group(1))))
+    ctype = "Contract"
+    m2 = re.search(r'CONTRACT TYPE[:\s]+(.+)', text, re.IGNORECASE)
+    if m2:
+        ctype = m2.group(1).strip().split('\n')[0][:60]
+    return level, score, ctype
 
 
-def render_risk_badge(risk_level, risk_score):
-    if risk_level == "HIGH RISK":
-        badge_class, color, bar_color, icon = "risk-high", "#ff6b6b", "#cc3333", "🔴"
-    elif risk_level == "LOW RISK":
-        badge_class, color, bar_color, icon = "risk-low", "#5fcc88", "#33aa66", "🟢"
-    else:
-        badge_class, color, bar_color, icon = "risk-medium", "#ffaa44", "#cc8833", "🟡"
-    bar_pct = risk_score * 10
+def render_risk_widget(level, score, ctype):
+    cfg = {
+        "HIGH RISK": ("#e05555", "#ff7070", "z-badge-high", "🔴"),
+        "MEDIUM RISK": ("#cc8833", "#ffb84d", "z-badge-medium", "🟡"),
+        "LOW RISK": ("#2d9e5f", "#5fcc88", "z-badge-low", "🟢"),
+    }
+    bar_c, text_c, badge_cls, icon = cfg.get(level, cfg["MEDIUM RISK"])
+    pct = score * 10
+
     st.markdown(f"""
-    <div class="prob-bar-wrapper">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-            <span style="font-family:'Cormorant Garamond',serif; font-size:1.1rem; color:#c9a84c; font-weight:600;">
-                Contract Risk Assessment
-            </span>
-            <span class="{badge_class}">{icon} {risk_level}</span>
+    <div class="z-progress-wrap">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+        <div>
+          <div style="font-family:'Cormorant Garamond',serif; font-size:1.15rem; color:var(--gold); font-weight:600;">
+            Risk Assessment
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-faint); margin-top:2px;">{ctype}</div>
         </div>
-        <div style="display:flex; align-items:center; gap:12px;">
-            <div class="prob-bar-track" style="flex:1;">
-                <div style="background:linear-gradient(90deg,{bar_color},{color});
-                            height:100%; width:{bar_pct}%; border-radius:20px;"></div>
-            </div>
-            <span style="color:{color}; font-size:1.1rem; font-weight:700;">{risk_score}/10</span>
+        <span class="{badge_cls}">{icon} {level}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div class="z-bar-track" style="flex:1;">
+          <div style="background:linear-gradient(90deg,{bar_c},{text_c}); height:100%; width:{pct}%; border-radius:20px;"></div>
         </div>
+        <span style="color:{text_c}; font-size:1.2rem; font-weight:700; font-family:'Cormorant Garamond',serif; min-width:36px;">{score}/10</span>
+      </div>
+      <div style="font-size:0.7rem; color:var(--text-faint); margin-top:6px;">
+        Higher score = more risk. Based on red flags, missing clauses, and one-sided terms.
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
 
-def render_section(icon, title, content, border_color="#1e3a5f"):
-    content_html = content.replace('\n', '<br>') if content else "—"
+SECTIONS = [
+    ("CONTRACT SUMMARY", "📋", "Contract Summary", "var(--gold)"),
+    ("RED FLAGS", "🚨", "Red Flags", "#e05555"),
+    ("KEY PROTECTIVE CLAUSES", "✅", "Key Protective Clauses", "#3dbb7a"),
+    ("MISSING STANDARD CLAUSES", "⚠️", "Missing Standard Clauses", "#e8a83a"),
+    ("NEGOTIATION RECOMMENDATIONS", "💡", "Negotiation Recommendations", "#5a9fd4"),
+    ("APPLICABLE INDIAN LAWS", "⚖️", "Applicable Indian Laws", "var(--gold)"),
+    ("BOTTOM LINE", "🔮", "Bottom Line", "#9b7ebd"),
+]
+
+
+def parse_sections(result):
+    parsed = {}
+    current_key = None
+    current_lines = []
+    keywords = [s[0] for s in SECTIONS]
+
+    for line in result.split('\n'):
+        clean = line.strip().upper()
+        matched = False
+        for kw in keywords:
+            if kw in clean and len(clean) < 80:
+                if current_key:
+                    parsed[current_key] = '\n'.join(current_lines).strip()
+                current_key = kw
+                current_lines = []
+                matched = True
+                break
+        if not matched and current_key:
+            skip = ["OVERALL RISK:", "RISK SCORE:", "CONTRACT TYPE:", "---"]
+            if not any(x in line.upper() for x in skip):
+                current_lines.append(line)
+
+    if current_key:
+        parsed[current_key] = '\n'.join(current_lines).strip()
+    return parsed
+
+
+def render_section(icon, title, content, border_color):
+    if not content:
+        return
+    content_html = content.replace('\n', '<br>').replace('**', '<strong style="color:var(--gold);">').replace('__', '</strong>')
     st.markdown(f"""
-    <div class="analysis-card" style="border-left:3px solid {border_color};">
-        <div style="font-family:'Cormorant Garamond',serif; font-size:1.05rem;
-                    color:#c9a84c; font-weight:600; margin-bottom:10px;">{icon} {title}</div>
-        <div style="color:#b0bcc8; font-size:0.86rem; line-height:1.8;">{content_html}</div>
+    <div class="z-section" style="border-left:3px solid {border_color};">
+      <div class="z-section-title">{icon} {title}</div>
+      <div class="z-section-body">{content_html}</div>
     </div>
     """, unsafe_allow_html=True)
 
 
 def contract_analyzer_ui():
-    st.markdown("""
-    <p style="color:#5a7494; font-size:0.88rem; margin-bottom:1.2rem;">
-    Upload any contract PDF and Zolvyn AI will analyze it clause by clause for risks,
-    red flags, and recommendations under Indian law.
-    </p>
-    """, unsafe_allow_html=True)
+    tab1, tab2 = st.tabs(["📄  Analyze Contract", "📊  What We Check"])
 
-    uploaded_file = st.file_uploader("Upload Contract PDF", type=["pdf"])
+    with tab1:
+        uploaded_file = st.file_uploader(
+            "Upload Contract PDF",
+            type=["pdf"],
+            help="Upload any contract — rental, employment, NDA, service agreement, partnership deed, etc."
+        )
 
-    if uploaded_file is not None:
-        file_size_kb = round(uploaded_file.size / 1024, 1)
-        st.markdown(f"""
-        <div style="background:#0d1b2a; border:1px solid #1e3a5f; border-radius:8px;
-                    padding:10px 16px; margin:8px 0; font-size:0.82rem; color:#6b8aab;">
-            📄 <strong style="color:#c9a84c;">{uploaded_file.name}</strong> · {file_size_kb} KB
+        if uploaded_file:
+            file_size_kb = round(uploaded_file.size / 1024, 1)
+            st.markdown(f"""
+            <div class="z-info-row">
+              📄 <strong style="color:var(--gold);">{uploaded_file.name}</strong>
+              &nbsp;·&nbsp; {file_size_kb} KB &nbsp;·&nbsp;
+              <span style="color:var(--text-faint);">Ready for analysis</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                analyze_btn = st.button("🔍 Analyze with Zolvyn AI", key="analyze_btn")
+            with col2:
+                focus = st.selectbox("Focus on", ["Full Analysis", "Red Flags Only", "Missing Clauses"], label_visibility="collapsed")
+
+            if analyze_btn:
+                with st.status("⚖️ Reading and analyzing your contract...", expanded=True) as status:
+                    st.write("📖 Extracting text from PDF...")
+                    text = extract_text_from_pdf(uploaded_file)
+                    if not text or len(text.strip()) < 80:
+                        status.update(label="❌ Could not read PDF", state="error")
+                        st.error("Could not extract text. This PDF may be image-based/scanned.")
+                        return
+                    st.write(f"✅ {len(text):,} characters extracted")
+                    st.write("🤖 Running expert legal analysis...")
+                    result = analyze_contract(text)
+                    status.update(label="✅ Analysis complete!", state="complete")
+
+                level, score, ctype = parse_risk(result)
+                render_risk_widget(level, score, ctype)
+
+                parsed = parse_sections(result)
+                if parsed:
+                    for kw, icon, title, border in SECTIONS:
+                        if focus == "Red Flags Only" and kw not in ["RED FLAGS", "CONTRACT SUMMARY", "BOTTOM LINE"]:
+                            continue
+                        if focus == "Missing Clauses" and kw not in ["MISSING STANDARD CLAUSES", "NEGOTIATION RECOMMENDATIONS", "BOTTOM LINE"]:
+                            continue
+                        render_section(icon, title, parsed.get(kw, ""), border)
+                else:
+                    render_section("📋", "Full Analysis", result, "var(--gold)")
+
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                st.download_button(
+                    label="📥 Download Report (.txt)",
+                    data=result,
+                    file_name=f"zolvyn_{uploaded_file.name.replace('.pdf','')}_analysis.txt",
+                    mime="text/plain"
+                )
+                st.markdown("""
+                <div class="z-disclaimer">
+                  ⚠️ This analysis is generated by Zolvyn AI for educational purposes only.
+                  Always review important contracts with a qualified Indian lawyer before signing.
+                </div>
+                """, unsafe_allow_html=True)
+
+    with tab2:
+        st.markdown("""
+        <div style="font-size:0.88rem; color:var(--text-dim); line-height:1.8; margin-bottom:20px;">
+          Zolvyn's contract analysis covers the following areas:
         </div>
         """, unsafe_allow_html=True)
-
-        if st.button("🔍 Analyze Contract with Zolvyn AI"):
-            with st.status("⚖️ Analyzing your contract...", expanded=True) as status:
-                st.write("📖 Reading PDF...")
-                text = extract_text_from_pdf(uploaded_file)
-                if not text or len(text.strip()) < 100:
-                    status.update(label="❌ Could not extract text", state="error")
-                    st.error("Could not extract readable text. This PDF may be image-based/scanned.")
-                    return
-                st.write(f"✅ Extracted {len(text):,} characters")
-                st.write("🤖 Running AI legal analysis...")
-                result = analyze_contract(text)
-                status.update(label="✅ Analysis complete!", state="complete")
-
-            risk_level, risk_score = parse_risk_level(result)
-            render_risk_badge(risk_level, risk_score)
-
-            sections_config = [
-                ("CONTRACT SUMMARY", "📋", "Contract Summary", "#c9a84c"),
-                ("RED FLAGS", "🚨", "Red Flags", "#cc3333"),
-                ("KEY CLAUSES", "✅", "Key Clauses", "#33aa66"),
-                ("MISSING TERMS", "⚠️", "Missing Terms", "#cc8833"),
-                ("RECOMMENDATIONS", "💡", "Recommendations", "#3a6ea8"),
-                ("INDIAN LAW APPLICABILITY", "⚖️", "Indian Law Applicability", "#c9a84c"),
-            ]
-
-            parsed = {}
-            current_key = None
-            current_lines = []
-            for line in result.split('\n'):
-                clean = line.strip().upper()
-                matched = False
-                for kw, _, _, _ in sections_config:
-                    if kw in clean and len(clean) < 70:
-                        if current_key:
-                            parsed[current_key] = '\n'.join(current_lines).strip()
-                        current_key = kw
-                        current_lines = []
-                        matched = True
-                        break
-                if not matched and current_key:
-                    if not any(x in line.upper() for x in ["OVERALL RISK:", "RISK SCORE:", "---"]):
-                        current_lines.append(line)
-            if current_key:
-                parsed[current_key] = '\n'.join(current_lines).strip()
-
-            if parsed:
-                for kw, icon, title, border in sections_config:
-                    content = parsed.get(kw, "")
-                    if content:
-                        render_section(icon, title, content, border_color=border)
-            else:
-                render_section("📋", "Full Analysis", result)
-
-            st.download_button(
-                label="📥 Download Report (.txt)",
-                data=result,
-                file_name=f"zolvyn_contract_{uploaded_file.name.replace('.pdf','')}.txt",
-                mime="text/plain"
-            )
+        checks = [
+            ("🚨", "One-sided termination clauses", "Clauses that let only one party exit without penalty"),
+            ("🚨", "Unlimited liability exposure", "Missing caps on your financial liability"),
+            ("🚨", "IP and ownership grabs", "Clauses that transfer your intellectual property"),
+            ("⚠️", "Missing dispute resolution", "No arbitration or jurisdiction clause"),
+            ("⚠️", "Vague payment terms", "No clear invoice/payment timeline"),
+            ("⚠️", "No confidentiality clause", "Your information isn't protected"),
+            ("✅", "Force majeure protection", "Protection in case of unforeseen events"),
+            ("✅", "Clear deliverable definitions", "Specific, measurable obligations for both parties"),
+            ("⚖️", "Indian Contract Act compliance", "Validity under Section 10 requirements"),
+            ("⚖️", "Consumer protection alignment", "Compliance with consumer protection laws"),
+        ]
+        for icon, title, desc in checks:
+            st.markdown(f"""
+            <div style="display:flex; gap:14px; padding:12px 0; border-bottom:1px solid var(--navy-4);">
+              <span style="font-size:1.1rem; flex-shrink:0;">{icon}</span>
+              <div>
+                <div style="font-size:0.85rem; color:var(--text); font-weight:500;">{title}</div>
+                <div style="font-size:0.78rem; color:var(--text-faint);">{desc}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)

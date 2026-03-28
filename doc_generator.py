@@ -1,94 +1,95 @@
-import os
-import re
-import tempfile
+import os, re, tempfile
 import streamlit as st
 from groq import Groq
 from fpdf import FPDF
 
+SYSTEM_PROMPT = """You are Zolvyn — an elite Indian legal document drafter with 25 years of experience drafting agreements for top law firms, corporations, and individuals across India.
+
+Your drafting philosophy:
+- Every document must be complete, enforceable, and court-ready under Indian law
+- Use precise legal language where required, but keep it readable
+- Never leave blanks or placeholders — use all provided details throughout
+- Include every standard clause that a competent Indian lawyer would include
+- Number all clauses properly (1., 1.1, 1.2, 2., etc.)
+- Structure documents exactly as they would appear in professional legal practice
+- Include recitals (WHEREAS clauses) for agreements
+- Always include: jurisdiction, governing law, dispute resolution, entire agreement, amendment procedure, and signature blocks
+- For Indian documents: reference applicable Indian laws, include stamp duty notice where relevant
+
+The document should look like it was drafted by a senior partner at a reputable Indian law firm."""
+
 DOCUMENT_TYPES = [
-    "Rental Agreement",
-    "Non Disclosure Agreement (NDA)",
-    "Employment Contract",
-    "Partnership Agreement",
-    "Service Agreement",
-    "Affidavit",
-    "Legal Notice",
+    "Rental Agreement", "Non Disclosure Agreement (NDA)", "Employment Contract",
+    "Partnership Agreement", "Service Agreement", "Affidavit", "Legal Notice",
+    "Freelancer Agreement", "Loan Agreement",
 ]
 
 DOC_ICONS = {
-    "Rental Agreement": "🏠",
-    "Non Disclosure Agreement (NDA)": "🔒",
-    "Employment Contract": "💼",
-    "Partnership Agreement": "🤝",
-    "Service Agreement": "📋",
-    "Affidavit": "📜",
-    "Legal Notice": "⚡",
+    "Rental Agreement": "🏠", "Non Disclosure Agreement (NDA)": "🔒",
+    "Employment Contract": "💼", "Partnership Agreement": "🤝",
+    "Service Agreement": "📋", "Affidavit": "📜",
+    "Legal Notice": "⚡", "Freelancer Agreement": "💻", "Loan Agreement": "💰",
 }
 
 DOC_DESCRIPTIONS = {
-    "Rental Agreement": "For landlords and tenants — residential or commercial property.",
+    "Rental Agreement": "Residential or commercial property rental — landlord & tenant.",
     "Non Disclosure Agreement (NDA)": "Protect confidential business information between parties.",
-    "Employment Contract": "Formalize hiring with salary, role, and terms.",
+    "Employment Contract": "Formalize hiring terms — salary, role, obligations.",
     "Partnership Agreement": "Define business partnership terms and profit sharing.",
-    "Service Agreement": "For freelancers, consultants, and service providers.",
-    "Affidavit": "Sworn statement for courts, government offices, and legal matters.",
+    "Service Agreement": "For consultants, agencies, and service providers.",
+    "Affidavit": "Sworn statement for courts, government, and legal purposes.",
     "Legal Notice": "Formal notice before initiating legal proceedings.",
+    "Freelancer Agreement": "Project-based work agreement for freelancers and clients.",
+    "Loan Agreement": "Personal or business loan between individuals or entities.",
 }
 
 
 def get_client():
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        st.error("⚠️ GROQ_API_KEY not found. Add it to your .env file: GROQ_API_KEY=your_key_here")
+        st.error("⚠️ GROQ_API_KEY not set.")
         st.stop()
     return Groq(api_key=api_key)
 
 
 def generate_document(doc_type, fields):
     client = get_client()
-    prompt = f"""You are Zolvyn AI — an expert Indian legal document drafter with 20+ years of experience.
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"""Draft a complete, professional, and legally valid {doc_type} for India.
 
-Generate a COMPLETE, PROFESSIONAL, and LEGALLY VALID {doc_type} using the details provided below.
-
-Requirements:
-- Use proper Indian legal language and formal structure
-- Include complete numbered clauses and sub-clauses
-- Follow standard format used in Indian courts and legal practice
-- Include all mandatory clauses required under Indian law for this document type
-- Add witness, signature, and date sections at the end
-- Do NOT use placeholder text — use the actual details provided throughout
+USE ALL THE DETAILS PROVIDED BELOW throughout the document. Do not use placeholders.
 
 Details:
 {fields}
 
-Generate the complete legal document now:"""
+Requirements:
+1. Full formal structure with numbered clauses and sub-clauses
+2. All standard clauses for this document type under Indian law
+3. Recitals / WHEREAS clauses where appropriate
+4. Dispute resolution clause (arbitration or jurisdiction)
+5. Governing law: Laws of India
+6. Complete signature block with date, place, witness lines
+7. Any relevant Indian law references
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are Zolvyn AI, an expert Indian legal document drafter. "
-                    "Generate complete, formal, professionally structured legal documents "
-                    "compliant with Indian law. Use proper legal language and numbered clauses."
-                )
-            },
-            {"role": "user", "content": prompt}
+Begin the document now:"""
+            }
         ],
-        max_tokens=3500,
-        temperature=0.2
+        max_tokens=4000,
+        temperature=0.15
     )
     return response.choices[0].message.content
 
 
-def save_as_pdf(text, doc_type="Legal Document"):
+def save_as_pdf(text, doc_type):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_margins(22, 22, 22)
     pdf.set_auto_page_break(auto=True, margin=20)
-
-    # Header bar
     pdf.set_fill_color(8, 13, 24)
     pdf.rect(0, 0, 210, 28, 'F')
     pdf.set_font("Arial", 'B', 13)
@@ -97,16 +98,12 @@ def save_as_pdf(text, doc_type="Legal Document"):
     pdf.cell(0, 9, f'ZOLVYN AI  -  {doc_type.upper()}', align='C', ln=True)
     pdf.set_font("Arial", '', 7)
     pdf.set_text_color(100, 120, 140)
-    pdf.cell(0, 6, 'Generated by Zolvyn AI  |  For Educational Use Only  |  Not a Substitute for Legal Advice', align='C', ln=True)
+    pdf.cell(0, 6, 'Generated by Zolvyn AI  |  Educational Use Only  |  Review with a Qualified Lawyer', align='C', ln=True)
     pdf.ln(6)
-
-    # Gold divider
     pdf.set_draw_color(201, 168, 76)
     pdf.set_line_width(0.5)
     pdf.line(22, pdf.get_y(), 188, pdf.get_y())
     pdf.ln(6)
-
-    # Document body
     pdf.set_text_color(20, 20, 20)
     for line in text.split('\n'):
         if not line.strip():
@@ -114,7 +111,7 @@ def save_as_pdf(text, doc_type="Legal Document"):
             continue
         safe_line = line.encode('latin-1', 'replace').decode('latin-1')
         is_heading = bool(re.match(r'^\d+[\.\)]\s+[A-Z]', line.strip())) or \
-                     any(line.strip().startswith(w) for w in ['WHEREAS', 'NOW THEREFORE', 'IN WITNESS', 'THIS AGREEMENT'])
+                     any(line.strip().startswith(w) for w in ['WHEREAS', 'NOW THEREFORE', 'IN WITNESS', 'THIS AGREEMENT', 'BETWEEN'])
         if is_heading:
             pdf.set_font("Arial", 'B', 10)
             pdf.set_text_color(20, 40, 80)
@@ -123,43 +120,54 @@ def save_as_pdf(text, doc_type="Legal Document"):
         else:
             pdf.set_font("Arial", '', 9.5)
             pdf.multi_cell(0, 6, safe_line)
-
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     pdf.output(tmp.name)
     return tmp.name
 
 
 def doc_generator_ui():
-    st.markdown("""
-    <p style="color:#5a7494; font-size:0.88rem; margin-bottom:1.2rem;">
-    Fill in the details below and Zolvyn AI will generate a complete, legally-structured document
-    following Indian law standards. Download as PDF or text instantly.
-    </p>
-    """, unsafe_allow_html=True)
+    col1, col2 = st.columns([2, 3])
+    with col1:
+        doc_type = st.selectbox(
+            "Document Type",
+            DOCUMENT_TYPES,
+            format_func=lambda x: f"{DOC_ICONS.get(x,'📄')}  {x}"
+        )
+        st.markdown(f"""
+        <div style="background:var(--gold-dim); border:1px solid rgba(201,168,76,0.2);
+                    border-radius:8px; padding:10px 14px; font-size:0.81rem; color:var(--text-dim); margin-top:4px;">
+          {DOC_ICONS.get(doc_type,'📄')} {DOC_DESCRIPTIONS.get(doc_type,'')}
+        </div>
+        """, unsafe_allow_html=True)
 
-    doc_type = st.selectbox(
-        "Select Document Type",
-        DOCUMENT_TYPES,
-        format_func=lambda x: f"{DOC_ICONS.get(x, '📄')}  {x}"
-    )
+    with col2:
+        st.markdown("""
+        <div style="background:var(--navy-2); border:1px solid var(--navy-4); border-radius:10px; padding:16px 20px;">
+          <div style="font-size:0.72rem; color:var(--text-faint); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
+            What you'll get
+          </div>
+          <div style="font-size:0.83rem; color:var(--text-dim); line-height:1.7;">
+            ✦ Complete numbered clause structure &nbsp;·&nbsp;
+            ✦ All standard Indian law provisions &nbsp;·&nbsp;
+            ✦ Signature & witness blocks &nbsp;·&nbsp;
+            ✦ Dispute resolution clause &nbsp;·&nbsp;
+            ✦ Download as PDF or TXT
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div style="background:rgba(201,168,76,0.06); border:1px solid rgba(201,168,76,0.15);
-                border-radius:8px; padding:10px 14px; margin:6px 0 16px 0; font-size:0.82rem; color:#7a94b0;">
-        {DOC_ICONS.get(doc_type, '📄')} &nbsp; {DOC_DESCRIPTIONS.get(doc_type, '')}
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div style="height:1px; background:linear-gradient(90deg,var(--navy-4),transparent); margin:20px 0;"></div>', unsafe_allow_html=True)
 
     fields = ""
 
     if doc_type == "Rental Agreement":
-        col1, col2 = st.columns(2)
-        with col1:
+        c1, c2 = st.columns(2)
+        with c1:
             landlord = st.text_input("Landlord Full Name")
             tenant = st.text_input("Tenant Full Name")
             rent = st.text_input("Monthly Rent (₹)")
             duration = st.text_input("Duration", placeholder="e.g. 11 months")
-        with col2:
+        with c2:
             address = st.text_area("Property Address", height=80)
             start_date = st.date_input("Start Date")
             deposit = st.text_input("Security Deposit (₹)")
@@ -167,96 +175,121 @@ def doc_generator_ui():
         fields = f"Landlord: {landlord}\nTenant: {tenant}\nProperty: {address}\nRent: Rs.{rent}\nDeposit: Rs.{deposit}\nDuration: {duration}\nStart: {start_date}\nCity: {city}"
 
     elif doc_type == "Non Disclosure Agreement (NDA)":
-        col1, col2 = st.columns(2)
-        with col1:
-            party1 = st.text_input("Disclosing Party Name / Company")
-            party2 = st.text_input("Receiving Party Name / Company")
-            purpose = st.text_area("Purpose of NDA", height=80)
-        with col2:
+        c1, c2 = st.columns(2)
+        with c1:
+            party1 = st.text_input("Disclosing Party")
+            party2 = st.text_input("Receiving Party")
+            purpose = st.text_area("Purpose", height=70)
+        with c2:
             duration = st.text_input("NDA Duration", placeholder="e.g. 2 years")
             scope = st.text_input("Scope of Confidential Info")
-            city = st.text_input("Jurisdiction City & State")
-            date = st.date_input("Agreement Date")
-        fields = f"Disclosing Party: {party1}\nReceiving Party: {party2}\nPurpose: {purpose}\nDuration: {duration}\nScope: {scope}\nCity: {city}\nDate: {date}"
+            city = st.text_input("Jurisdiction City")
+            date = st.date_input("Date")
+        fields = f"Disclosing: {party1}\nReceiving: {party2}\nPurpose: {purpose}\nDuration: {duration}\nScope: {scope}\nCity: {city}\nDate: {date}"
 
     elif doc_type == "Employment Contract":
-        col1, col2 = st.columns(2)
-        with col1:
-            employer = st.text_input("Employer / Company Name")
+        c1, c2 = st.columns(2)
+        with c1:
+            employer = st.text_input("Company Name")
             employee = st.text_input("Employee Full Name")
-            role = st.text_input("Job Title / Designation")
+            role = st.text_input("Designation / Role")
             salary = st.text_input("Monthly CTC (₹)")
-        with col2:
-            start_date = st.date_input("Date of Joining")
+        with c2:
+            start_date = st.date_input("Joining Date")
             location = st.text_input("Work Location")
             notice = st.text_input("Notice Period", placeholder="e.g. 30 days")
             probation = st.text_input("Probation Period", placeholder="e.g. 6 months")
-        fields = f"Employer: {employer}\nEmployee: {employee}\nDesignation: {role}\nCTC: Rs.{salary}\nJoining: {start_date}\nLocation: {location}\nNotice: {notice}\nProbation: {probation}"
+        fields = f"Employer: {employer}\nEmployee: {employee}\nRole: {role}\nCTC: Rs.{salary}\nJoining: {start_date}\nLocation: {location}\nNotice: {notice}\nProbation: {probation}"
 
     elif doc_type == "Partnership Agreement":
-        col1, col2 = st.columns(2)
-        with col1:
-            partner1 = st.text_input("Partner 1 Full Name")
-            partner2 = st.text_input("Partner 2 Full Name")
-            business = st.text_input("Business / Firm Name")
-            share1 = st.text_input("Partner 1 Profit Share %")
-        with col2:
-            share2 = st.text_input("Partner 2 Profit Share %")
+        c1, c2 = st.columns(2)
+        with c1:
+            p1 = st.text_input("Partner 1 Name")
+            p2 = st.text_input("Partner 2 Name")
+            biz = st.text_input("Business Name")
+            s1 = st.text_input("Partner 1 Share %")
+        with c2:
+            s2 = st.text_input("Partner 2 Share %")
             capital = st.text_input("Total Capital (₹)")
-            city = st.text_input("Place of Business")
+            city = st.text_input("Business Location")
             date = st.date_input("Agreement Date")
-        fields = f"Partner 1: {partner1}\nPartner 2: {partner2}\nBusiness: {business}\nShare 1: {share1}%\nShare 2: {share2}%\nCapital: Rs.{capital}\nCity: {city}\nDate: {date}"
+        fields = f"Partner 1: {p1}\nPartner 2: {p2}\nBusiness: {biz}\nShare 1: {s1}%\nShare 2: {s2}%\nCapital: Rs.{capital}\nCity: {city}\nDate: {date}"
 
     elif doc_type == "Service Agreement":
-        col1, col2 = st.columns(2)
-        with col1:
-            provider = st.text_input("Service Provider Name / Company")
-            client_name = st.text_input("Client Name / Company")
-            service = st.text_area("Service Description", height=80)
-            amount = st.text_input("Service Amount (₹)")
-        with col2:
-            duration = st.text_input("Contract Duration")
-            start_date = st.date_input("Start Date")
-            payment = st.text_input("Payment Terms", placeholder="e.g. 50% advance, 50% on delivery")
-            city = st.text_input("Jurisdiction City & State")
-        fields = f"Provider: {provider}\nClient: {client_name}\nService: {service}\nAmount: Rs.{amount}\nDuration: {duration}\nStart: {start_date}\nPayment: {payment}\nCity: {city}"
+        c1, c2 = st.columns(2)
+        with c1:
+            provider = st.text_input("Service Provider")
+            client_n = st.text_input("Client Name")
+            service = st.text_area("Service Description", height=70)
+            amount = st.text_input("Amount (₹)")
+        with c2:
+            duration = st.text_input("Duration")
+            start = st.date_input("Start Date")
+            payment = st.text_input("Payment Terms")
+            city = st.text_input("Jurisdiction")
+        fields = f"Provider: {provider}\nClient: {client_n}\nService: {service}\nAmount: Rs.{amount}\nDuration: {duration}\nStart: {start}\nPayment: {payment}\nCity: {city}"
 
     elif doc_type == "Affidavit":
-        col1, col2 = st.columns(2)
-        with col1:
+        c1, c2 = st.columns(2)
+        with c1:
             deponent = st.text_input("Deponent Full Name")
             age = st.text_input("Age")
             occupation = st.text_input("Occupation")
-            address = st.text_area("Residential Address", height=80)
-        with col2:
-            purpose = st.text_area("Purpose / Subject of Affidavit", height=80,
-                                   placeholder="e.g. Declaring I have no criminal record for visa purposes")
-            facts = st.text_area("Facts to be Stated", height=80)
+            address = st.text_area("Address", height=70)
+        with c2:
+            purpose = st.text_area("Purpose of Affidavit", height=70)
+            facts = st.text_area("Facts to Declare", height=70)
             city = st.text_input("City & State")
             date = st.date_input("Date")
         fields = f"Deponent: {deponent}\nAge: {age}\nOccupation: {occupation}\nAddress: {address}\nPurpose: {purpose}\nFacts: {facts}\nCity: {city}\nDate: {date}"
 
     elif doc_type == "Legal Notice":
-        col1, col2 = st.columns(2)
-        with col1:
-            sender = st.text_input("Sender's Full Name")
-            sender_addr = st.text_area("Sender's Address", height=80)
-            recipient = st.text_input("Recipient's Full Name")
-            recipient_addr = st.text_area("Recipient's Address", height=80)
-        with col2:
-            subject = st.text_input("Subject / Nature of Notice",
-                                    placeholder="e.g. Non-payment of dues, cheque bounce")
-            facts = st.text_area("Brief Facts", height=80)
-            demand = st.text_area("Relief Demanded", height=60)
-            deadline = st.text_input("Response Deadline", placeholder="e.g. 15 days from receipt")
-        fields = f"Sender: {sender}\nSender Address: {sender_addr}\nRecipient: {recipient}\nRecipient Address: {recipient_addr}\nSubject: {subject}\nFacts: {facts}\nDemand: {demand}\nDeadline: {deadline}"
+        c1, c2 = st.columns(2)
+        with c1:
+            sender = st.text_input("Sender Name")
+            sender_addr = st.text_area("Sender Address", height=70)
+            recipient = st.text_input("Recipient Name")
+            recipient_addr = st.text_area("Recipient Address", height=70)
+        with c2:
+            subject = st.text_input("Subject / Nature", placeholder="e.g. Non-payment of dues")
+            facts = st.text_area("Brief Facts", height=70)
+            demand = st.text_input("Relief Demanded")
+            deadline = st.text_input("Response Deadline", placeholder="e.g. 15 days")
+        fields = f"Sender: {sender}\nSender Addr: {sender_addr}\nRecipient: {recipient}\nRecipient Addr: {recipient_addr}\nSubject: {subject}\nFacts: {facts}\nDemand: {demand}\nDeadline: {deadline}"
+
+    elif doc_type == "Freelancer Agreement":
+        c1, c2 = st.columns(2)
+        with c1:
+            freelancer = st.text_input("Freelancer Name")
+            client_n = st.text_input("Client / Company Name")
+            project = st.text_area("Project Description", height=70)
+            amount = st.text_input("Total Project Amount (₹)")
+        with c2:
+            deadline_d = st.date_input("Project Deadline")
+            payment = st.text_input("Payment Schedule", placeholder="e.g. 30% advance, 70% on delivery")
+            deliverables = st.text_input("Key Deliverables")
+            city = st.text_input("Jurisdiction City")
+        fields = f"Freelancer: {freelancer}\nClient: {client_n}\nProject: {project}\nAmount: Rs.{amount}\nDeadline: {deadline_d}\nPayment: {payment}\nDeliverables: {deliverables}\nCity: {city}"
+
+    elif doc_type == "Loan Agreement":
+        c1, c2 = st.columns(2)
+        with c1:
+            lender = st.text_input("Lender Full Name")
+            borrower = st.text_input("Borrower Full Name")
+            amount = st.text_input("Loan Amount (₹)")
+            interest = st.text_input("Interest Rate", placeholder="e.g. 12% per annum")
+        with c2:
+            duration = st.text_input("Repayment Period", placeholder="e.g. 12 months")
+            start = st.date_input("Disbursement Date")
+            repayment = st.text_input("Repayment Schedule", placeholder="e.g. Monthly EMI")
+            city = st.text_input("Jurisdiction City")
+        fields = f"Lender: {lender}\nBorrower: {borrower}\nAmount: Rs.{amount}\nInterest: {interest}\nDuration: {duration}\nDate: {start}\nRepayment: {repayment}\nCity: {city}"
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
     if st.button(f"⚡ Generate {doc_type}"):
-        stripped = fields.replace('\n', '').replace(' ', '').replace(':', '').replace('Rs.', '')
-        if len(stripped) < 20:
-            st.warning("⚠️ Please fill in the required details before generating.")
+        if len(fields.replace('\n','').replace(' ','').replace(':','').replace('Rs.','')) < 15:
+            st.warning("⚠️ Please fill in the required details.")
             return
 
         with st.status(f"📝 Drafting your {doc_type}...", expanded=True) as status:
@@ -271,45 +304,28 @@ def doc_generator_ui():
                 st.error(f"Error: {e}")
                 return
 
+        icon = DOC_ICONS.get(doc_type, '📄')
         st.markdown(f"""
-        <div style="font-family:'Cormorant Garamond',serif; font-size:1.3rem;
-                    color:#c9a84c; font-weight:600; margin:16px 0 10px;">
-            {DOC_ICONS.get(doc_type, '📄')} Generated {doc_type}
-        </div>
+        <div style="font-family:'Cormorant Garamond',serif; font-size:1.4rem; color:var(--gold);
+                    font-weight:600; margin:16px 0 10px;">{icon} {doc_type}</div>
         """, unsafe_allow_html=True)
 
-        # Preview
         st.markdown(f"""
-        <div style="background:#0d1b2a; border:1px solid #1e3a5f; border-radius:10px;
-                    padding:20px; font-family:monospace; font-size:0.8rem; color:#b0bcc8;
-                    line-height:1.7; max-height:480px; overflow-y:auto; white-space:pre-wrap;">{document[:3000]}{"..." if len(document) > 3000 else ""}</div>
+        <div style="background:var(--navy-2); border:1px solid var(--navy-4); border-radius:10px;
+                    padding:20px; font-family:monospace; font-size:0.79rem; color:#b0bcc8;
+                    line-height:1.75; max-height:500px; overflow-y:auto; white-space:pre-wrap;">{document[:3500]}{"..." if len(document) > 3500 else ""}</div>
         """, unsafe_allow_html=True)
 
-        col1, col2 = st.columns(2)
-        filename_base = doc_type.lower().replace(' ', '_').replace('(', '').replace(')', '')
-        with col1:
-            st.download_button(
-                label="📥 Download as Text (.txt)",
-                data=document,
-                file_name=f"zolvyn_{filename_base}.txt",
-                mime="text/plain"
-            )
-        with col2:
+        fn = doc_type.lower().replace(' ','_').replace('(','').replace(')','')
+        c1, c2 = st.columns(2)
+        with c1:
+            st.download_button("📥 Download as Text", data=document, file_name=f"zolvyn_{fn}.txt", mime="text/plain")
+        with c2:
             try:
                 pdf_path = save_as_pdf(document, doc_type)
                 with open(pdf_path, "rb") as f:
-                    st.download_button(
-                        label="📄 Download as PDF",
-                        data=f,
-                        file_name=f"zolvyn_{filename_base}.pdf",
-                        mime="application/pdf"
-                    )
+                    st.download_button("📄 Download as PDF", data=f, file_name=f"zolvyn_{fn}.pdf", mime="application/pdf")
             except Exception as e:
-                st.warning(f"PDF error: {e}. Use text download above.")
+                st.warning(f"PDF error: {e}. Use text download.")
 
-        st.markdown("""
-        <div style="background:rgba(201,168,76,0.05); border:1px solid rgba(201,168,76,0.15);
-                    border-radius:8px; padding:12px 16px; margin-top:8px; font-size:0.78rem; color:#3a5470;">
-            ⚠️ Generated by Zolvyn AI for educational purposes. Review with a qualified Indian lawyer before use.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("""<div class="z-disclaimer">⚠️ Generated by Zolvyn AI. Review with a qualified Indian lawyer before signing or use in legal proceedings.</div>""", unsafe_allow_html=True)
