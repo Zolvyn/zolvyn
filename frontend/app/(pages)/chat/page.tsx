@@ -274,7 +274,8 @@ export default function ChatPage() {
                 ) : (
                   <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
                     <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'linear-gradient(135deg, rgba(126,184,247,0.12), rgba(201,168,76,0.08))', border: '1px solid #2a3347', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0, marginTop: '3px' }}>⚖️</div>
-                    <div style={{ flex: 1, minWidth: 0, paddingLeft: '4px', borderLeft: '2px solid #4caf82', paddingLeft: '16px' }}>
+
+                    <div style={{ flex: 1, minWidth: 0, borderLeft: '2px solid #4caf82', paddingLeft: '16px' }}>
                       <div style={{ fontSize: '15px', lineHeight: 1.75, color: '#e8eaf0', fontWeight: 300, whiteSpace: 'pre-wrap' }}>
                         {msg.content}
                         {msg.streaming && <span style={{ display: 'inline-block', width: '2px', height: '15px', background: '#e8c96d', marginLeft: '2px', verticalAlign: 'middle', animation: 'blink 0.85s ease infinite' }}>|</span>}
