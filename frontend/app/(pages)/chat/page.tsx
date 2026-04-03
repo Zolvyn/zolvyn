@@ -127,7 +127,7 @@ export default function ChatPage() {
         const updated = [...prev];
         updated[updated.length - 1] = {
           role: 'ai',
-          content: 'Sorry, could not connect to the backend. Make sure it is running on port 8000.',
+          content: `Error: Could not reach ${API_URL}. Check console for details.`,
           streaming: false,
         };
         return updated;

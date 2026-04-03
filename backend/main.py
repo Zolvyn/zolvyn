@@ -2,7 +2,7 @@
 ╔══════════════════════════════════════════════════════════════╗
 ║           ZOLVYN AI — FastAPI Backend                       ║
 ║           Converted from Streamlit → FastAPI                ║
-║           Groq llama-3.3-70b-versatile + LangChain RAG      ║
+║           Groq llama-3.3-70b-versatile                      ║
 ╚══════════════════════════════════════════════════════════════╝
 
 Routes:
@@ -10,7 +10,7 @@ Routes:
   POST /api/contract      → Contract Analyzer
   POST /api/generate      → Document Generator
   POST /api/predict       → Case Predictor
-  GET  /api/bare-acts     → Bare Acts Search
+  POST /api/bare-acts     → Bare Acts Search
   GET  /health            → Health check
 """
 
@@ -38,16 +38,11 @@ vectorstore = None
 
 app = FastAPI(title="Zolvyn AI Backend", version="2.0.0")
 
-# ── CORS — allow Next.js frontend ──
+# ── CORS — allow everything ──
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://zolvynai.com",
-        "https://www.zolvynai.com",
-        "https://*.vercel.app",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -65,7 +60,7 @@ class ChatRequest(BaseModel):
 
 class ContractRequest(BaseModel):
     text: str
-    analysis_type: str = "full"  # full | key_terms | risks
+    analysis_type: str = "full"
 
 class GenerateRequest(BaseModel):
     template_type: str
@@ -75,7 +70,7 @@ class GenerateRequest(BaseModel):
 class PredictRequest(BaseModel):
     case_description: str
     case_type: str
-    side: str = "plaintiff"  # plaintiff | defendant
+    side: str = "plaintiff"
 
 class BareActsRequest(BaseModel):
     query: str
@@ -163,13 +158,11 @@ Be precise and cite exact section numbers."""
 # ════════════════════════════════════════════════════
 
 def get_rag_context(query: str, k: int = 4) -> str:
-    """Fetch relevant context from FAISS vectorstore if available."""
     if not RAG_AVAILABLE or vectorstore is None:
         return ""
     try:
         docs = vectorstore.similarity_search(query, k=k)
-        context = "\n\n".join([doc.page_content for doc in docs])
-        return f"\n\nRELEVANT LEGAL DOCUMENTS:\n{context}\n"
+        return "\n\nRELEVANT LEGAL DOCUMENTS:\n" + "\n\n".join([doc.page_content for doc in docs])
     except Exception:
         return ""
 
@@ -180,10 +173,6 @@ def get_rag_context(query: str, k: int = 4) -> str:
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    """
-    Streams legal Q&A responses word-by-word via Server-Sent Events.
-    Frontend receives: data: {"token": "word "} per chunk
-    """
     rag_context = get_rag_context(request.question)
 
     system_prompt = CHAT_SYSTEM.format(
@@ -192,11 +181,8 @@ async def chat(request: ChatRequest):
     ) + rag_context
 
     messages = [{"role": "system", "content": system_prompt}]
-
-    # Add conversation history (last 6 turns)
     for msg in request.history[-6:]:
         messages.append(msg)
-
     messages.append({"role": "user", "content": request.question})
 
     async def event_stream() -> AsyncGenerator[str, None]:
@@ -211,24 +197,17 @@ async def chat(request: ChatRequest):
             for chunk in stream:
                 delta = chunk.choices[0].delta
                 if delta.content:
-                    token = delta.content
-                    data = json.dumps({"token": token})
+                    data = json.dumps({"token": delta.content})
                     yield f"data: {data}\n\n"
-                    await asyncio.sleep(0)  # yield control
-
-            # Signal end of stream
+                    await asyncio.sleep(0)
             yield f"data: {json.dumps({'done': True})}\n\n"
-
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        }
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -238,15 +217,10 @@ async def chat(request: ChatRequest):
 
 @app.post("/api/contract")
 async def analyze_contract(request: ContractRequest):
-    """
-    Analyzes contract text and returns structured JSON with risk assessment.
-    """
     if len(request.text.strip()) < 50:
         raise HTTPException(status_code=400, detail="Contract text too short.")
 
-    # Truncate to 8000 chars to stay within context
     contract_text = request.text[:8000]
-
     messages = [
         {"role": "system", "content": CONTRACT_SYSTEM},
         {"role": "user", "content": f"Analyze this contract:\n\n{contract_text}"}
@@ -254,29 +228,23 @@ async def analyze_contract(request: ContractRequest):
 
     try:
         response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            max_tokens=3000,
-            temperature=0.1,
-            response_format={"type": "json_object"},
+            model=MODEL, messages=messages, max_tokens=3000,
+            temperature=0.1, response_format={"type": "json_object"},
         )
         result = json.loads(response.choices[0].message.content)
         return {"status": "success", "data": result}
     except json.JSONDecodeError:
-        # Return raw text if JSON parsing fails
-        raw = response.choices[0].message.content
-        return {"status": "success", "data": {"raw": raw}}
+        return {"status": "success", "data": {"raw": response.choices[0].message.content}}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/contract/upload")
 async def analyze_contract_file(file: UploadFile = File(...)):
-    """Upload PDF/DOCX contract file for analysis."""
     import io
     content = await file.read()
-
     text = ""
+
     if file.filename.endswith(".pdf"):
         try:
             import pdfplumber
@@ -302,8 +270,7 @@ async def analyze_contract_file(file: UploadFile = File(...)):
     if not text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from file.")
 
-    req = ContractRequest(text=text)
-    return await analyze_contract(req)
+    return await analyze_contract(ContractRequest(text=text))
 
 
 # ════════════════════════════════════════════════════
@@ -327,15 +294,11 @@ DOCUMENT_TEMPLATES = {
 
 @app.post("/api/generate")
 async def generate_document(request: GenerateRequest):
-    """
-    Generates a complete Indian legal document based on template type and fields.
-    """
     template_name = DOCUMENT_TEMPLATES.get(request.template_type)
     if not template_name:
         raise HTTPException(status_code=400, detail=f"Unknown template: {request.template_type}")
 
     fields_text = "\n".join([f"- {k}: {v}" for k, v in request.fields.items()])
-
     prompt = f"""Generate a complete, court-ready Indian {template_name} with the following details:
 
 {fields_text}
@@ -358,17 +321,9 @@ Requirements:
 
     try:
         response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            max_tokens=4000,
-            temperature=0.2,
+            model=MODEL, messages=messages, max_tokens=4000, temperature=0.2,
         )
-        document_text = response.choices[0].message.content
-        return {
-            "status": "success",
-            "template": template_name,
-            "document": document_text
-        }
+        return {"status": "success", "template": template_name, "document": response.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -379,9 +334,6 @@ Requirements:
 
 @app.post("/api/predict")
 async def predict_case(request: PredictRequest):
-    """
-    Predicts case outcome with win probability, strategy, and similar cases.
-    """
     prompt = f"""Case Type: {request.case_type}
 Side: {request.side}
 Case Description: {request.case_description}
@@ -395,17 +347,13 @@ Analyze this Indian legal case thoroughly and provide prediction."""
 
     try:
         response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            max_tokens=3000,
-            temperature=0.2,
-            response_format={"type": "json_object"},
+            model=MODEL, messages=messages, max_tokens=3000,
+            temperature=0.2, response_format={"type": "json_object"},
         )
         result = json.loads(response.choices[0].message.content)
         return {"status": "success", "data": result}
     except json.JSONDecodeError:
-        raw = response.choices[0].message.content
-        return {"status": "success", "data": {"raw": raw}}
+        return {"status": "success", "data": {"raw": response.choices[0].message.content}}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -416,7 +364,6 @@ async def predict_from_file(
     case_type: str = Form("General"),
     side: str = Form("plaintiff")
 ):
-    """Upload FIR or court order PDF for case prediction."""
     import io
     content = await file.read()
     text = ""
@@ -432,12 +379,7 @@ async def predict_from_file(
     if not text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from file.")
 
-    req = PredictRequest(
-        case_description=text[:4000],
-        case_type=case_type,
-        side=side
-    )
-    return await predict_case(req)
+    return await predict_case(PredictRequest(case_description=text[:4000], case_type=case_type, side=side))
 
 
 # ════════════════════════════════════════════════════
@@ -446,10 +388,6 @@ async def predict_from_file(
 
 @app.post("/api/bare-acts")
 async def search_bare_acts(request: BareActsRequest):
-    """
-    Search and explain any Indian law section in plain language.
-    Supports streaming via SSE.
-    """
     prompt = f"Query: {request.query}"
     if request.act != "all":
         prompt += f"\nFocus on: {request.act}"
@@ -462,17 +400,13 @@ async def search_bare_acts(request: BareActsRequest):
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
             stream = client.chat.completions.create(
-                model=MODEL,
-                messages=messages,
-                max_tokens=1500,
-                temperature=0.1,
-                stream=True,
+                model=MODEL, messages=messages, max_tokens=1500,
+                temperature=0.1, stream=True,
             )
             for chunk in stream:
                 delta = chunk.choices[0].delta
                 if delta.content:
-                    data = json.dumps({"token": delta.content})
-                    yield f"data: {data}\n\n"
+                    yield f"data: {json.dumps({'token': delta.content})}\n\n"
                     await asyncio.sleep(0)
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
