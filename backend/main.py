@@ -32,16 +32,9 @@ from groq import Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODEL = "llama-3.3-70b-versatile"
 
-# ── RAG imports (optional — graceful fallback if vectorstore not built) ──
-try:
-    from langchain_community.vectorstores import FAISS
-    from langchain_community.embeddings import HuggingFaceEmbeddings
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    vectorstore = FAISS.load_local("vectorstore", embeddings, allow_dangerous_deserialization=True)
-    RAG_AVAILABLE = True
-except Exception:
-    RAG_AVAILABLE = False
-    vectorstore = None
+# ── RAG disabled for now (add later) ──
+RAG_AVAILABLE = False
+vectorstore = None
 
 app = FastAPI(title="Zolvyn AI Backend", version="2.0.0")
 
