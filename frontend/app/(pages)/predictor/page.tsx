@@ -1,26 +1,17 @@
 'use client';
-
 import { useState } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-const SIDEBAR_ITEMS = [
-  { href: '/chat', icon: '💬', label: 'Legal Q&A' },
-  { href: '/contract', icon: '📄', label: 'Contract Analyzer' },
-  { href: '/generator', icon: '📝', label: 'Document Generator' },
-  { href: '/predictor', icon: '🔮', label: 'Case Predictor', active: true },
-  { href: '/bareacts', icon: '📚', label: 'Bare Acts' },
-  { href: '/upgrade', icon: '⚡', label: 'Upgrade to Pro' },
+const NAV = [
+  { icon: '💬', label: 'Legal Q&A', href: '/chat' },
+  { icon: '📄', label: 'Contract Analyzer', href: '/contract' },
+  { icon: '📝', label: 'Document Generator', href: '/generator' },
+  { icon: '🔮', label: 'Case Predictor', href: '/predictor', active: true },
+  { icon: '⚖️', label: 'Bare Acts', href: '/bareacts' },
 ];
 
-const CASE_TYPES = [
-  'Criminal — Theft / Robbery', 'Criminal — Assault / Murder', 'Criminal — Cybercrime',
-  'Civil — Property Dispute', 'Civil — Contract Breach', 'Consumer Complaint',
-  'Family — Divorce / Custody', 'Family — Maintenance', 'Labour — Wrongful Termination',
-  'Labour — Salary Dispute', 'Cheque Bounce — NI Act 138', 'Motor Accident Claim',
-  'Tenancy Dispute', 'Corporate — Fraud', 'RERA — Builder Dispute',
-  'RTI — Information Denial', 'Tax — GST Dispute',
-];
+const CASE_TYPES = ['Criminal', 'Civil', 'Family', 'Consumer', 'Property', 'Employment', 'Cyber', 'Motor Accident', 'Cheque Bounce', 'RERA', 'Tax', 'Corporate', 'Intellectual Property', 'Matrimonial', 'Constitutional', 'Bail', 'Arbitration'];
 
 interface PredictResult {
   win_probability: number;
@@ -34,195 +25,219 @@ interface PredictResult {
   timeline: string;
 }
 
+type State = 'idle' | 'predicting' | 'done';
+
 export default function PredictorPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [description, setDescription] = useState('');
-  const [caseType, setCaseType] = useState(CASE_TYPES[0]);
+  const [state, setState] = useState<State>('idle');
+  const [caseType, setCaseType] = useState('Criminal');
   const [side, setSide] = useState<'plaintiff' | 'defendant'>('plaintiff');
-  const [loading, setLoading] = useState(false);
+  const [description, setDescription] = useState('');
   const [result, setResult] = useState<PredictResult | null>(null);
-  const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
 
   const predict = async () => {
-    if (!description.trim()) { setError('Please describe your case.'); return; }
-    setLoading(true); setError(''); setResult(null);
+    if (!description.trim() || description.trim().length < 30) return;
+    setState('predicting'); setResult(null);
     try {
       const res = await fetch(`${API_URL}/api/predict`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ case_description: description, case_type: caseType, side }),
       });
       const json = await res.json();
-      if (json.status === 'success') setResult(json.data);
-      else setError('Prediction failed. Try again.');
-    } catch {
-      setError('Cannot connect to backend. Make sure it is running on port 8000.');
-    }
-    setLoading(false);
+      if (json.status === 'success') { setResult(json.data); setState('done'); }
+      else { setState('idle'); }
+    } catch { setState('idle'); }
   };
 
-  const probColor = result
-    ? result.win_probability >= 70 ? '#4caf82'
-    : result.win_probability >= 40 ? '#e8c96d' : '#e05252'
-    : '#4caf82';
+  const probColor = (p: number) => p >= 65 ? '#4caf82' : p >= 40 ? '#e8a030' : '#e05252';
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#080a0f', color: '#e8eaf0', fontFamily: "'Outfit', sans-serif", overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', background: '#080a0f', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", overflow: 'hidden' }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-thumb{background:#2a3347;border-radius:4px}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes gavel-swing{from{transform:rotate(-18deg)}to{transform:rotate(12deg)}}
+        @keyframes dot-bounce{0%,80%,100%{transform:translateY(0);opacity:0.4}40%{transform:translateY(-8px);opacity:1}}
+        @keyframes ring-pulse{0%{transform:scale(1);opacity:0.5}50%{transform:scale(1.3);opacity:0.15}100%{transform:scale(1);opacity:0.5}}
+        @keyframes fill-bar{from{width:0}to{width:var(--w)}}
+        .nav-item:hover{background:#161b28 !important;color:#e8eaf0 !important}
+        textarea::placeholder{color:#4a5568}
+        textarea{outline:none}
+        select{outline:none}
+      `}</style>
 
       {/* SIDEBAR */}
       <div style={{ width: sidebarOpen ? '260px' : '0', minWidth: sidebarOpen ? '260px' : '0', background: '#0d1018', borderRight: '1px solid #1e2535', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width 0.28s, min-width 0.28s', flexShrink: 0 }}>
-        <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid #1e2535', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <a href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ fontWeight: 300, fontSize: '17px', letterSpacing: '0.26em', color: '#e8eaf0', display: 'flex', alignItems: 'center' }}>
-              Z<span style={{ display: 'inline-block', width: '14px', height: '14px', border: '1.5px solid #7eb8f7', borderRadius: '50%', margin: '0 1px', boxShadow: '0 0 8px rgba(126,184,247,0.3)' }}></span>LVY N
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 16px 14px', borderBottom: '1px solid #1e2535' }}>
+          <a href="/landing" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+            <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 200, fontSize: '16px', color: '#e8eaf0', display: 'flex', alignItems: 'center' }}>
+              <span style={{ letterSpacing: '0.18em' }}>Z</span>
+              <span style={{ display: 'inline-block', width: '13px', height: '13px', border: '1.5px solid #7eb8f7', borderRadius: '50%', margin: '0 3px', boxShadow: '0 0 8px rgba(126,184,247,0.3)' }}></span>
+              <span style={{ letterSpacing: '0.18em' }}>LVYN</span>
             </div>
-            <div style={{ width: '1px', height: '18px', background: '#2a3347' }}></div>
-            <div style={{ fontSize: '9.5px', letterSpacing: '0.18em', color: '#4a5568', textTransform: 'uppercase' as const, fontWeight: 300 }}>Legal Intelligence</div>
+            <div style={{ width: '1px', height: '22px', background: '#2a3347' }}></div>
+            <div style={{ fontSize: '9.5px', letterSpacing: '0.18em', color: '#4a5568', textTransform: 'uppercase', fontWeight: 300 }}>Legal Intelligence</div>
           </a>
-          <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', color: '#7a8499', cursor: 'pointer', fontSize: '16px' }}>◀</button>
+          <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '14px' }}>◀</button>
         </div>
-        <div style={{ padding: '8px 10px', flex: 1, overflowY: 'auto' as const }}>
-          {SIDEBAR_ITEMS.map(item => (
-            <a key={item.href} href={item.href} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '8px', color: item.active ? '#e8eaf0' : '#9aa3b2', fontSize: '13.5px', textDecoration: 'none', fontWeight: 300, background: item.active ? 'rgba(201,168,76,0.07)' : 'transparent', marginBottom: '2px', border: item.active ? '1px solid rgba(201,168,76,0.12)' : '1px solid transparent' }}>
-              <span>{item.icon}</span>{item.label}
+        <div style={{ padding: '10px 10px 6px', borderBottom: '1px solid #1e2535' }}>
+          {NAV.map(item => (
+            <a key={item.href} href={item.href} className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '7px', color: item.active ? '#e8eaf0' : '#9aa3b2', background: item.active ? '#161b28' : 'transparent', fontSize: '13.5px', textDecoration: 'none', fontWeight: 300, marginBottom: '2px' }}>
+              <span style={{ opacity: 0.8 }}>{item.icon}</span><span>{item.label}</span>
             </a>
           ))}
         </div>
-        <div style={{ padding: '12px', borderTop: '1px solid #1e2535' }}>
-          <button onClick={() => window.location.href = '/upgrade'} style={{ width: '100%', padding: '10px', borderRadius: '9px', background: 'linear-gradient(135deg, #c9a84c, #e8c96d)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#0d0a04', fontFamily: 'inherit' }}>👑 Upgrade to Pro</button>
+        <div style={{ flex: 1 }}></div>
+        <div style={{ borderTop: '1px solid #1e2535', padding: '12px' }}>
+          <button onClick={() => window.location.href = '/upgrade'} style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#0d0a04', fontFamily: "'Outfit',sans-serif" }}>👑 Upgrade to Pro</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginTop: '10px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#0d0a04' }}>Z</div>
+            <div><div style={{ fontSize: '13px', color: '#e8eaf0', fontWeight: 500 }}>Zolvyn User</div><div style={{ fontSize: '11px', color: '#4a5568' }}>Free plan</div></div>
+          </div>
         </div>
       </div>
 
       {/* MAIN */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', minWidth: 0 }}>
-        <div style={{ height: '56px', minHeight: '56px', borderBottom: '1px solid #1e2535', display: 'flex', alignItems: 'center', padding: '0 24px', gap: '12px' }}>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'none', border: 'none', color: '#7a8499', cursor: 'pointer', fontSize: '18px' }}>☰</button>
-          <span style={{ fontSize: '15px', fontWeight: 500 }}>Case Predictor</span>
+        <div style={{ height: '56px', minHeight: '56px', background: '#0d1018', borderBottom: '1px solid #1e2535', display: 'flex', alignItems: 'center', padding: '0 20px', gap: '14px' }}>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '18px' }}>☰</button>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: '#e8eaf0' }}>Case Predictor</span>
+          {state === 'done' && <button onClick={() => { setState('idle'); setResult(null); setDescription(''); }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: '7px', border: '1px solid #1e2535', background: 'none', color: '#9aa3b2', fontSize: '13px', cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}>New Prediction</button>}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '28px', fontWeight: 300, fontStyle: 'italic', marginBottom: '6px' }}>
-              Predict your <span style={{ color: '#e8c96d' }}>case outcome</span>
-            </div>
-            <div style={{ fontSize: '14px', color: '#9aa3b2', fontWeight: 300, marginBottom: '28px' }}>Describe your legal situation and get AI-powered win probability, strategy, and similar precedents.</div>
+          <div style={{ maxWidth: '860px', margin: '0 auto' }}>
 
-            {/* Input grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-              <div>
-                <div style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#4a5568', marginBottom: '8px' }}>Case Type</div>
-                <select value={caseType} onChange={e => setCaseType(e.target.value)} style={{ width: '100%', background: '#0d1018', border: '1px solid #2a3347', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#e8eaf0', fontFamily: 'inherit', outline: 'none' }}>
-                  {CASE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <div style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#4a5568', marginBottom: '8px' }}>Your Side</div>
-                <div style={{ display: 'flex', gap: '0', background: '#0d1018', border: '1px solid #1e2535', borderRadius: '10px', padding: '4px' }}>
-                  {(['plaintiff', 'defendant'] as const).map(s => (
-                    <button key={s} onClick={() => setSide(s)} style={{ flex: 1, padding: '10px', borderRadius: '7px', border: 'none', background: side === s ? '#161b28' : 'none', color: side === s ? '#e8eaf0' : '#9aa3b2', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' as const }}>{s}</button>
-                  ))}
+            {(state === 'idle') && (
+              <>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '30px', fontWeight: 300, fontStyle: 'italic', color: '#e8eaf0', marginBottom: '6px' }}>
+                  Predict your <span style={{ background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>case outcome</span>
                 </div>
-              </div>
-            </div>
+                <p style={{ fontSize: '14px', color: '#9aa3b2', fontWeight: 300, marginBottom: '28px' }}>Describe your case and get win probability, applicable laws, real precedents, and strategy.</p>
 
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#4a5568', marginBottom: '8px' }}>Case Description</div>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe your legal situation in detail — what happened, when, who is involved, what evidence you have…" style={{ width: '100%', minHeight: '160px', background: '#0d1018', border: '1px solid #2a3347', borderRadius: '12px', padding: '16px', fontSize: '14px', color: '#e8eaf0', fontFamily: 'inherit', fontWeight: 300, lineHeight: 1.7, resize: 'vertical', outline: 'none' }} />
-            </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#9aa3b2', letterSpacing: '0.5px', marginBottom: '7px' }}>Case Type</label>
+                    <select value={caseType} onChange={e => setCaseType(e.target.value)} style={{ width: '100%', background: '#111520', border: '1.5px solid #1e2535', borderRadius: '9px', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", fontSize: '14px', padding: '10px 14px', cursor: 'pointer' }}>
+                      {CASE_TYPES.map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#9aa3b2', letterSpacing: '0.5px', marginBottom: '7px' }}>Your Side</label>
+                    <div style={{ display: 'flex', border: '1.5px solid #1e2535', borderRadius: '9px', overflow: 'hidden' }}>
+                      {(['plaintiff', 'defendant'] as const).map(s => (
+                        <button key={s} onClick={() => setSide(s)} style={{ flex: 1, padding: '10px', fontSize: '14px', fontFamily: "'Outfit',sans-serif", border: 'none', cursor: 'pointer', background: side === s ? '#1a2030' : '#111520', color: side === s ? '#e8eaf0' : '#9aa3b2', fontWeight: side === s ? 500 : 300, borderRight: s === 'plaintiff' ? '1px solid #1e2535' : 'none' }}>
+                          {s === 'plaintiff' ? '⚡ Plaintiff' : '🛡️ Defendant'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-            <button onClick={predict} disabled={loading} style={{ padding: '12px 36px', background: 'linear-gradient(135deg, #c9a84c, #e8c96d)', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, color: '#0d0a04', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: loading ? 0.6 : 1, marginBottom: '28px' }}>
-              {loading ? 'Predicting…' : 'Predict Outcome →'}
-            </button>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#9aa3b2', letterSpacing: '0.5px', marginBottom: '7px' }}>Case Description</label>
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe your case in detail — what happened, who is involved, what you want as outcome, any FIR numbers, relevant dates, and key facts…" rows={8} style={{ width: '100%', background: '#111520', border: '1.5px solid #1e2535', borderRadius: '12px', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", fontSize: '14px', fontWeight: 300, lineHeight: 1.7, padding: '18px 20px', resize: 'vertical' }} />
+                </div>
 
-            {error && <div style={{ background: 'rgba(224,82,82,0.08)', border: '1px solid rgba(224,82,82,0.2)', borderRadius: '10px', padding: '14px', color: '#e05252', fontSize: '13.5px', marginBottom: '20px' }}>{error}</div>}
+                <button onClick={predict} disabled={description.trim().length < 30} style={{ width: '100%', padding: '13px', borderRadius: '10px', background: description.trim().length >= 30 ? 'linear-gradient(135deg,#c9a84c,#e8c96d)' : '#1e2535', border: 'none', color: description.trim().length >= 30 ? '#000' : '#4a5568', fontSize: '14.5px', fontWeight: 600, cursor: description.trim().length >= 30 ? 'pointer' : 'not-allowed', fontFamily: "'Outfit',sans-serif" }}>
+                  🔮 Predict Case Outcome
+                </button>
+              </>
+            )}
 
-            {loading && (
-              <div style={{ textAlign: 'center', padding: '48px', color: '#9aa3b2' }}>
-                <div style={{ fontSize: '32px', marginBottom: '16px' }}>⚖️</div>
-                <div style={{ fontSize: '15px', marginBottom: '8px' }}>Analyzing case…</div>
-                <div style={{ fontSize: '13px', color: '#4a5568' }}>Searching precedents and applicable laws</div>
+            {state === 'predicting' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', gap: '22px' }}>
+                <div style={{ position: 'relative', width: '70px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(201,168,76,0.2)', animation: 'ring-pulse 1.8s ease-in-out infinite' }}></div>
+                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(201,168,76,0.2)', animation: 'ring-pulse 1.8s ease-in-out 0.6s infinite' }}></div>
+                  <span style={{ fontSize: '30px', animation: 'gavel-swing 1.2s ease-in-out infinite alternate', transformOrigin: 'bottom right', display: 'inline-block' }}>🔮</span>
+                </div>
+                <div style={{ fontSize: '14px', color: '#9aa3b2', fontWeight: 300 }}>Analyzing precedents and Indian law…</div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {[0, 1, 2].map(i => <div key={i} style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#c9a84c', animation: `dot-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}></div>)}
+                </div>
               </div>
             )}
 
-            {result && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-                {/* Win probability */}
-                <div style={{ background: '#0d1018', border: '1px solid #1e2535', borderRadius: '14px', padding: '28px', display: 'flex', alignItems: 'center', gap: '32px' }}>
+            {state === 'done' && result && (
+              <div style={{ animation: 'fadeUp 0.4s ease' }}>
+                {/* Win Probability */}
+                <div style={{ background: '#111520', border: '1px solid #1e2535', borderRadius: '16px', padding: '28px', marginBottom: '24px', display: 'flex', gap: '32px', alignItems: 'center' }}>
                   <div style={{ textAlign: 'center', flexShrink: 0 }}>
-                    <div style={{ width: '100px', height: '100px', borderRadius: '50%', border: `4px solid ${probColor}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 24px ${probColor}33` }}>
-                      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '28px', fontWeight: 500, color: probColor, lineHeight: 1 }}>{result.win_probability}%</div>
-                      <div style={{ fontSize: '10px', color: '#4a5568', letterSpacing: '0.06em', textTransform: 'uppercase' as const }}>Win</div>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '64px', fontWeight: 300, color: probColor(result.win_probability), lineHeight: 1 }}>{result.win_probability}%</div>
+                    <div style={{ fontSize: '11px', color: '#4a5568', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '4px' }}>Win Probability</div>
+                    <div style={{ marginTop: '12px', height: '4px', background: '#1e2535', borderRadius: '2px', overflow: 'hidden', width: '120px' }}>
+                      <div style={{ height: '100%', width: `${result.win_probability}%`, background: `linear-gradient(90deg,${probColor(result.win_probability)},${probColor(result.win_probability)}aa)`, borderRadius: '2px', transition: 'width 1s ease' }}></div>
                     </div>
-                    <div style={{ fontSize: '11px', color: '#4a5568', marginTop: '8px' }}>Confidence: {result.confidence}</div>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '12px', color: '#4a5568', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Recommended Action</div>
-                    <div style={{ fontSize: '15px', color: '#e8eaf0', lineHeight: 1.6, fontWeight: 400 }}>{result.recommended_action}</div>
-                    {result.timeline && <div style={{ fontSize: '13px', color: '#9aa3b2', marginTop: '8px', fontWeight: 300 }}>⏱ Estimated timeline: {result.timeline}</div>}
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: 'rgba(201,168,76,0.1)', color: '#e8c96d', border: '1px solid rgba(201,168,76,0.25)' }}>{caseType}</span>
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: 'rgba(126,184,247,0.1)', color: '#7eb8f7', border: '1px solid rgba(126,184,247,0.25)' }}>{side}</span>
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: result.confidence === 'HIGH' ? 'rgba(76,175,130,0.1)' : 'rgba(232,160,48,0.1)', color: result.confidence === 'HIGH' ? '#4caf82' : '#e8a030', border: `1px solid ${result.confidence === 'HIGH' ? 'rgba(76,175,130,0.25)' : 'rgba(232,160,48,0.25)'}` }}>{result.confidence} CONFIDENCE</span>
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#e8eaf0', fontWeight: 400, marginBottom: '8px' }}>⚡ Next Step: {result.recommended_action}</div>
+                    <div style={{ fontSize: '13px', color: '#9aa3b2', fontWeight: 300 }}>⏱ Estimated timeline: {result.timeline}</div>
                   </div>
                 </div>
 
-                {/* Strengths & Weaknesses */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div style={{ background: '#0d1018', border: '1px solid rgba(76,175,130,0.2)', borderRadius: '14px', overflow: 'hidden' }}>
-                    <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(76,175,130,0.15)', fontSize: '13px', fontWeight: 500, color: '#4caf82' }}>✅ Strengths</div>
-                    <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {result.strengths?.map((s, i) => <div key={i} style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300, lineHeight: 1.55, paddingLeft: '10px', borderLeft: '2px solid #4caf82' }}>{s}</div>)}
-                    </div>
-                  </div>
-                  <div style={{ background: '#0d1018', border: '1px solid rgba(224,82,82,0.2)', borderRadius: '14px', overflow: 'hidden' }}>
-                    <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(224,82,82,0.15)', fontSize: '13px', fontWeight: 500, color: '#e05252' }}>⚠️ Weaknesses</div>
-                    <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {result.weaknesses?.map((w, i) => <div key={i} style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300, lineHeight: 1.55, paddingLeft: '10px', borderLeft: '2px solid #e05252' }}>{w}</div>)}
-                    </div>
-                  </div>
+                {/* Tabs */}
+                <div style={{ display: 'flex', borderBottom: '1px solid #1e2535', marginBottom: '20px' }}>
+                  {['Laws', 'Precedents', 'Strengths', 'Strategy'].map((t, i) => (
+                    <button key={t} onClick={() => setActiveTab(i)} style={{ padding: '10px 18px', fontSize: '13px', background: 'none', border: 'none', borderBottom: activeTab === i ? '2px solid #c9a84c' : '2px solid transparent', color: activeTab === i ? '#e8c96d' : '#9aa3b2', cursor: 'pointer', fontFamily: "'Outfit',sans-serif", fontWeight: activeTab === i ? 500 : 300, marginBottom: '-1px' }}>
+                      {t}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Strategy */}
-                {result.strategy?.length > 0 && (
-                  <div style={{ background: '#0d1018', border: '1px solid #1e2535', borderRadius: '14px', overflow: 'hidden' }}>
-                    <div style={{ padding: '16px 20px', borderBottom: '1px solid #1e2535', fontSize: '14px', fontWeight: 500 }}>📋 Legal Strategy</div>
-                    <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {result.strategy.map((s, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '12px', fontSize: '14px', color: '#9aa3b2', fontWeight: 300, lineHeight: 1.6 }}>
-                          <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#e8c96d', flexShrink: 0, marginTop: '2px' }}>{i + 1}</span>
-                          {s}
+                <div style={{ background: '#111520', border: '1px solid #1e2535', borderRadius: '14px', overflow: 'hidden' }}>
+                  {activeTab === 0 && result.applicable_laws?.map((law, i) => (
+                    <div key={i} style={{ padding: '16px 22px', borderBottom: i < result.applicable_laws.length - 1 ? '1px solid #1e2535' : 'none', display: 'flex', gap: '16px' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontFamily: "'JetBrains Mono',monospace", color: '#7eb8f7', background: 'rgba(126,184,247,0.08)', border: '1px solid rgba(126,184,247,0.2)', flexShrink: 0, height: 'fit-content', marginTop: '2px' }}>{law.section}</span>
+                      <span style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300, lineHeight: 1.6 }}>{law.relevance}</span>
+                    </div>
+                  ))}
+                  {activeTab === 1 && result.similar_cases?.map((c, i) => (
+                    <div key={i} style={{ padding: '18px 22px', borderBottom: i < result.similar_cases.length - 1 ? '1px solid #1e2535' : 'none' }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#e8eaf0' }}>{c.name}</span>
+                        <span style={{ fontSize: '11px', color: '#4a5568', fontFamily: "'JetBrains Mono',monospace" }}>{c.court} · {c.year}</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#4caf82', fontWeight: 300, marginBottom: '4px' }}>Outcome: {c.outcome}</div>
+                      <div style={{ fontSize: '13px', color: '#9aa3b2', fontWeight: 300 }}>{c.relevance}</div>
+                    </div>
+                  ))}
+                  {activeTab === 2 && (
+                    <div>
+                      {result.strengths?.map((s, i) => (
+                        <div key={i} style={{ padding: '13px 22px', borderBottom: '1px solid #1e2535', display: 'flex', gap: '10px' }}>
+                          <span style={{ color: '#4caf82', flexShrink: 0 }}>✓</span>
+                          <span style={{ fontSize: '13.5px', color: '#e8eaf0', fontWeight: 300 }}>{s}</span>
+                        </div>
+                      ))}
+                      {result.weaknesses?.map((w, i) => (
+                        <div key={i} style={{ padding: '13px 22px', borderBottom: i < result.weaknesses.length - 1 ? '1px solid #1e2535' : 'none', display: 'flex', gap: '10px' }}>
+                          <span style={{ color: '#e05252', flexShrink: 0 }}>✕</span>
+                          <span style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300 }}>{w}</span>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {/* Applicable Laws */}
-                {result.applicable_laws?.length > 0 && (
-                  <div style={{ background: '#0d1018', border: '1px solid #1e2535', borderRadius: '14px', overflow: 'hidden' }}>
-                    <div style={{ padding: '16px 20px', borderBottom: '1px solid #1e2535', fontSize: '14px', fontWeight: 500 }}>⚖️ Applicable Laws</div>
-                    <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {result.applicable_laws.map((l, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                          <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#7eb8f7', background: 'rgba(126,184,247,0.08)', border: '1px solid rgba(126,184,247,0.2)', padding: '2px 8px', borderRadius: '5px', whiteSpace: 'nowrap' as const }}>{l.section}</span>
-                          <span style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300, lineHeight: 1.5 }}>{l.relevance}</span>
-                        </div>
-                      ))}
+                  )}
+                  {activeTab === 3 && result.strategy?.map((step, i) => (
+                    <div key={i} style={{ padding: '16px 22px', borderBottom: i < result.strategy.length - 1 ? '1px solid #1e2535' : 'none', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                      <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#000', flexShrink: 0 }}>{i + 1}</div>
+                      <span style={{ fontSize: '13.5px', color: '#e8eaf0', fontWeight: 300, lineHeight: 1.65 }}>{step}</span>
                     </div>
-                  </div>
-                )}
-
+                  ))}
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Outfit:wght@300;400;500;600&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #1e2535; border-radius: 4px; }
-        select option { background: #0d1018; }
-        a { color: inherit; }
-      `}</style>
     </div>
   );
 }
