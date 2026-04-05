@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { trackPageVisit, trackQuery, getStoredUser, createUser, storeUser } from '../../lib/supabase';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -73,6 +74,81 @@ function NamePopup({ onComplete }: { onComplete: (name: string) => void }) {
     </div>
   );
 }
+
+// ─── MARKDOWN COMPONENTS ────────────────────────────────────────────────────
+// Custom renderers so ReactMarkdown + remark-gfm produce styled output
+const mdComponents: Record<string, React.FC<any>> = {
+  h1: ({ children }) => (
+    <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 500, fontSize: '24px', color: '#e8eaf0', margin: '22px 0 10px', lineHeight: 1.3, borderBottom: '1px solid #1e2535', paddingBottom: '8px' }}>{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 500, fontSize: '20px', color: '#e8eaf0', margin: '20px 0 8px', lineHeight: 1.3 }}>{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 500, fontSize: '17px', color: '#e8c96d', margin: '16px 0 6px', lineHeight: 1.3 }}>{children}</h3>
+  ),
+  p: ({ children }) => (
+    <p style={{ margin: '0 0 14px', lineHeight: 1.8, fontWeight: 300, color: '#e8eaf0', fontSize: '15px' }}>{children}</p>
+  ),
+  strong: ({ children }) => (
+    <strong style={{ color: '#e8eaf0', fontWeight: 600 }}>{children}</strong>
+  ),
+  em: ({ children }) => (
+    <em style={{ color: '#e8c96d', fontStyle: 'italic' }}>{children}</em>
+  ),
+  ul: ({ children }) => (
+    <ul style={{ paddingLeft: 0, margin: '0 0 14px', listStyle: 'none' }}>{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol style={{ paddingLeft: '22px', margin: '0 0 14px' }}>{children}</ol>
+  ),
+  li: ({ children, ordered }: { children: any; ordered?: boolean }) => (
+    <li style={{ marginBottom: '8px', lineHeight: 1.7, fontWeight: 300, color: '#e8eaf0', paddingLeft: ordered ? 0 : '20px', position: 'relative', fontSize: '15px' }}>
+      {!ordered && (
+        <span style={{ position: 'absolute', left: 0, top: '1px', color: '#c9a84c', fontSize: '16px', lineHeight: 1.5 }}>•</span>
+      )}
+      {children}
+    </li>
+  ),
+  code: ({ inline, children }: { inline?: boolean; children: any }) =>
+    inline ? (
+      <code style={{ background: '#161b28', border: '1px solid #2a3347', borderRadius: '4px', padding: '2px 7px', fontFamily: "'JetBrains Mono',monospace", fontSize: '12px', color: '#7eb8f7' }}>{children}</code>
+    ) : (
+      <pre style={{ background: '#111520', border: '1px solid #1e2535', borderRadius: '10px', padding: '16px', overflowX: 'auto', margin: '14px 0' }}>
+        <code style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '13px', color: '#e8eaf0', background: 'none' }}>{children}</code>
+      </pre>
+    ),
+  blockquote: ({ children }) => (
+    <blockquote style={{ borderLeft: '3px solid #c9a84c', padding: '10px 18px', margin: '14px 0', color: '#9aa3b2', background: 'rgba(201,168,76,0.04)', borderRadius: '0 8px 8px 0' }}>{children}</blockquote>
+  ),
+  hr: () => <hr style={{ border: 'none', borderTop: '1px solid #1e2535', margin: '18px 0' }} />,
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#7eb8f7', textDecoration: 'underline' }}>{children}</a>
+  ),
+  // ─── TABLE ───────────────────────────────────────────────────────────────
+  table: ({ children }) => (
+    <div style={{ overflowX: 'auto', margin: '18px 0', borderRadius: '10px', border: '1px solid #1e2535' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px', minWidth: '400px' }}>
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead style={{ background: '#161b28' }}>{children}</thead>
+  ),
+  tbody: ({ children }) => (
+    <tbody>{children}</tbody>
+  ),
+  tr: ({ children }) => (
+    <tr style={{ borderBottom: '1px solid rgba(30,37,53,0.7)' }}>{children}</tr>
+  ),
+  th: ({ children }) => (
+    <th style={{ padding: '11px 16px', textAlign: 'left', fontWeight: 600, color: '#9aa3b2', fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid #1e2535', whiteSpace: 'nowrap' }}>{children}</th>
+  ),
+  td: ({ children }) => (
+    <td style={{ padding: '11px 16px', color: '#e8eaf0', lineHeight: 1.6, fontSize: '13.5px', fontWeight: 300, verticalAlign: 'top' }}>{children}</td>
+  ),
+};
 
 export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -184,12 +260,36 @@ export default function ChatPage() {
 
     try {
       const response = await fetch(`${API_URL}/api/chat`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: questionWithContext,
           context_laws: activeChips.length ? activeChips : ['BNS', 'BNSS', 'IPC', 'Constitution'],
           state: 'All India',
           history,
+          // ── FIX: increase max tokens so answers never get cut off ──
+          max_tokens: 4096,
+          // ── FIX: system prompt for structured, complete answers ──
+          system_prompt: `You are Zolvyn AI, India's expert legal intelligence assistant. You MUST:
+1. Always give COMPLETE answers — never stop mid-sentence or truncate.
+2. Use rich Markdown formatting:
+   - **Bold** for key legal terms, section numbers, and important points
+   - Use ## and ### headers to organise long answers
+   - Use bullet points (- item) for lists of rights, steps, or points
+   - Use numbered lists (1. 2. 3.) for sequential procedures
+   - Use proper Markdown tables (with | pipes and --- separators) when comparing laws, penalties, timelines, or multiple options
+   - Use > blockquotes for actual legal text or landmark judgments
+3. Structure every answer with:
+   - A brief direct answer first (2-3 sentences)
+   - Detailed breakdown with headers and bullets
+   - Relevant sections/acts cited
+   - Practical next steps for the user
+4. When a table would help clarity, ALWAYS use it. Example format:
+   | Column 1 | Column 2 | Column 3 |
+   |----------|----------|----------|
+   | Value    | Value    | Value    |
+5. Cite specific sections: e.g., **Section 406 IPC**, **Article 21 Constitution**, **Section 17 RERA**
+6. End with a ⚠️ disclaimer to consult a qualified advocate for their specific situation.`,
         }),
       });
 
@@ -261,30 +361,6 @@ export default function ChatPage() {
         .ec:hover{border-color:#2a3347 !important;background:rgba(255,255,255,0.02) !important}
         .nav-a:hover{background:#161b28 !important;color:#e8eaf0 !important}
         .conv-item:hover{background:#161b28 !important}
-
-        .ai-md h1,.ai-md h2,.ai-md h3{font-family:'Cormorant Garamond',serif;font-weight:500;color:#e8eaf0;margin:18px 0 10px;line-height:1.3}
-        .ai-md h1{font-size:24px} .ai-md h2{font-size:20px} .ai-md h3{font-size:17px}
-        .ai-md p{margin-bottom:14px;line-height:1.8;font-weight:300;color:#e8eaf0}
-        .ai-md p:last-child{margin-bottom:0}
-        .ai-md strong{color:#e8eaf0;font-weight:600}
-        .ai-md em{color:#e8c96d;font-style:italic}
-        .ai-md ul{padding-left:0;margin-bottom:14px;list-style:none}
-        .ai-md ol{padding-left:20px;margin-bottom:14px}
-        .ai-md ul li{margin-bottom:8px;line-height:1.7;font-weight:300;color:#e8eaf0;padding-left:18px;position:relative}
-        .ai-md ul li::before{content:'•';position:absolute;left:0;color:#c9a84c;font-size:16px;line-height:1.5}
-        .ai-md ol li{margin-bottom:8px;line-height:1.7;font-weight:300;color:#e8eaf0}
-        .ai-md code{background:#161b28;border:1px solid #2a3347;border-radius:4px;padding:2px 7px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#7eb8f7}
-        .ai-md pre{background:#111520;border:1px solid #1e2535;border-radius:10px;padding:16px;overflow-x:auto;margin:14px 0}
-        .ai-md pre code{background:none;border:none;padding:0;font-size:13px;color:#e8eaf0}
-        .ai-md blockquote{border-left:3px solid #c9a84c;padding:10px 18px;margin:14px 0;color:#9aa3b2;background:rgba(201,168,76,0.04);border-radius:0 8px 8px 0}
-        .ai-md table{width:100%;border-collapse:collapse;margin:18px 0;font-size:13.5px;border:1px solid #1e2535;border-radius:10px;overflow:hidden}
-        .ai-md thead{background:#161b28}
-        .ai-md th{padding:11px 16px;text-align:left;font-weight:600;color:#9aa3b2;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;border-bottom:1px solid #1e2535}
-        .ai-md td{padding:11px 16px;border-bottom:1px solid rgba(30,37,53,0.6);color:#e8eaf0;line-height:1.6;font-size:13.5px;font-weight:300}
-        .ai-md tr:last-child td{border-bottom:none}
-        .ai-md tr:hover td{background:rgba(255,255,255,0.018)}
-        .ai-md a{color:#7eb8f7;text-decoration:underline}
-        .ai-md hr{border:none;border-top:1px solid #1e2535;margin:18px 0}
       `}</style>
 
       {showNamePopup && <NamePopup onComplete={handleNameComplete} />}
@@ -412,11 +488,16 @@ export default function ChatPage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="ai-md" style={{ fontSize: '15px', color: '#e8eaf0' }}>
-                            {msg.streaming ? (
-                              <div style={{ whiteSpace: 'pre-wrap', fontWeight: 300, lineHeight: 1.8 }}>{msg.content}<span style={{ display: 'inline-block', width: '2px', height: '15px', background: '#e8c96d', marginLeft: '2px', verticalAlign: 'middle', animation: 'blink 0.85s ease infinite' }}></span></div>
-                            ) : (
-                              <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          <div style={{ fontSize: '15px', color: '#e8eaf0' }}>
+                            {/* ── Always use ReactMarkdown so tables/bullets render even while streaming ── */}
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={mdComponents}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                            {msg.streaming && (
+                              <span style={{ display: 'inline-block', width: '2px', height: '15px', background: '#e8c96d', marginLeft: '2px', verticalAlign: 'middle', animation: 'blink 0.85s ease infinite' }}></span>
                             )}
                           </div>
                         )}
