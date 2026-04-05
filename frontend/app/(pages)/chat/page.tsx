@@ -36,7 +36,6 @@ const NAV = [
   { icon: '⚖️', label: 'Bare Acts', href: '/bareacts' },
 ];
 
-// Name Popup
 function NamePopup({ onComplete }: { onComplete: (name: string) => void }) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -90,7 +89,6 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load conversations from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('zolvyn_conversations');
     if (saved) {
@@ -104,7 +102,6 @@ export default function ChatPage() {
     else setTimeout(() => setShowNamePopup(true), 600);
   }, []);
 
-  // Save conversations to localStorage
   useEffect(() => {
     if (conversations.length > 0) localStorage.setItem('zolvyn_conversations', JSON.stringify(conversations));
   }, [conversations]);
@@ -155,7 +152,6 @@ export default function ChatPage() {
 
   const toggleChip = (chip: string) => setActiveChips(prev => prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip]);
 
-  // Handle file upload for RAG
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -175,18 +171,15 @@ export default function ChatPage() {
     setStreaming(true);
 
     const userMsg: Message = { role: 'user', content: q };
-    const aiMsg: Message = { role: 'ai', content: '', streaming: true };
-    const newMessages = [...messages, userMsg, aiMsg];
+    const newMessages = [...messages, userMsg, { role: 'ai' as const, content: '', streaming: true }];
     setMessages(newMessages);
     trackQuery('chat', q);
 
-    // Build context with uploaded doc if any
     let questionWithContext = q;
     if (uploadedDoc) {
       questionWithContext = `[User uploaded document: "${uploadedDoc.name}"]\n\nDocument content:\n${uploadedDoc.content}\n\n---\n\nUser question: ${q}`;
     }
 
-    // Build history for context (last 6 messages)
     const history = messages.slice(-6).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
 
     try {
@@ -197,7 +190,6 @@ export default function ChatPage() {
           context_laws: activeChips.length ? activeChips : ['BNS', 'BNSS', 'IPC', 'Constitution'],
           state: 'All India',
           history,
-          max_tokens: 4096,
         }),
       });
 
@@ -239,7 +231,6 @@ export default function ChatPage() {
 
   const handleKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
 
-  // Group conversations by date
   const groupConversations = () => {
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
@@ -271,34 +262,35 @@ export default function ChatPage() {
         .nav-a:hover{background:#161b28 !important;color:#e8eaf0 !important}
         .conv-item:hover{background:#161b28 !important}
 
-        /* Markdown styles */
-        .ai-md h1,.ai-md h2,.ai-md h3{font-family:'Cormorant Garamond',serif;font-weight:500;color:#e8eaf0;margin:16px 0 8px;line-height:1.3}
-        .ai-md h1{font-size:22px} .ai-md h2{font-size:19px} .ai-md h3{font-size:17px}
-        .ai-md p{margin-bottom:12px;line-height:1.75;font-weight:300}
+        .ai-md h1,.ai-md h2,.ai-md h3{font-family:'Cormorant Garamond',serif;font-weight:500;color:#e8eaf0;margin:18px 0 10px;line-height:1.3}
+        .ai-md h1{font-size:24px} .ai-md h2{font-size:20px} .ai-md h3{font-size:17px}
+        .ai-md p{margin-bottom:14px;line-height:1.8;font-weight:300;color:#e8eaf0}
         .ai-md p:last-child{margin-bottom:0}
-        .ai-md strong{color:#e8eaf0;font-weight:500}
+        .ai-md strong{color:#e8eaf0;font-weight:600}
         .ai-md em{color:#e8c96d;font-style:italic}
-        .ai-md ul,.ai-md ol{padding-left:20px;margin-bottom:12px}
-        .ai-md li{margin-bottom:6px;line-height:1.65;font-weight:300;color:#e8eaf0}
-        .ai-md ul li{list-style:disc} .ai-md ol li{list-style:decimal}
-        .ai-md code{background:#161b28;border:1px solid #2a3347;border-radius:4px;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#7eb8f7}
-        .ai-md pre{background:#111520;border:1px solid #1e2535;border-radius:10px;padding:16px;overflow-x:auto;margin:12px 0}
+        .ai-md ul{padding-left:0;margin-bottom:14px;list-style:none}
+        .ai-md ol{padding-left:20px;margin-bottom:14px}
+        .ai-md ul li{margin-bottom:8px;line-height:1.7;font-weight:300;color:#e8eaf0;padding-left:18px;position:relative}
+        .ai-md ul li::before{content:'•';position:absolute;left:0;color:#c9a84c;font-size:16px;line-height:1.5}
+        .ai-md ol li{margin-bottom:8px;line-height:1.7;font-weight:300;color:#e8eaf0}
+        .ai-md code{background:#161b28;border:1px solid #2a3347;border-radius:4px;padding:2px 7px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#7eb8f7}
+        .ai-md pre{background:#111520;border:1px solid #1e2535;border-radius:10px;padding:16px;overflow-x:auto;margin:14px 0}
         .ai-md pre code{background:none;border:none;padding:0;font-size:13px;color:#e8eaf0}
-        .ai-md blockquote{border-left:3px solid #c9a84c;padding:8px 16px;margin:12px 0;color:#9aa3b2;background:rgba(201,168,76,0.04);border-radius:0 8px 8px 0}
-        .ai-md table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px;border-radius:10px;overflow:hidden}
-        .ai-md th{background:#161b28;padding:10px 14px;text-align:left;font-weight:500;color:#9aa3b2;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;border-bottom:1px solid #1e2535}
-        .ai-md td{padding:10px 14px;border-bottom:1px solid rgba(30,37,53,0.5);color:#e8eaf0;line-height:1.5;font-size:13.5px;font-weight:300}
+        .ai-md blockquote{border-left:3px solid #c9a84c;padding:10px 18px;margin:14px 0;color:#9aa3b2;background:rgba(201,168,76,0.04);border-radius:0 8px 8px 0}
+        .ai-md table{width:100%;border-collapse:collapse;margin:18px 0;font-size:13.5px;border:1px solid #1e2535;border-radius:10px;overflow:hidden}
+        .ai-md thead{background:#161b28}
+        .ai-md th{padding:11px 16px;text-align:left;font-weight:600;color:#9aa3b2;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;border-bottom:1px solid #1e2535}
+        .ai-md td{padding:11px 16px;border-bottom:1px solid rgba(30,37,53,0.6);color:#e8eaf0;line-height:1.6;font-size:13.5px;font-weight:300}
         .ai-md tr:last-child td{border-bottom:none}
-        .ai-md tr:hover td{background:rgba(255,255,255,0.015)}
-        .ai-md a{color:#7eb8f7;text-decoration:none}
-        .ai-md hr{border:none;border-top:1px solid #1e2535;margin:16px 0}
+        .ai-md tr:hover td{background:rgba(255,255,255,0.018)}
+        .ai-md a{color:#7eb8f7;text-decoration:underline}
+        .ai-md hr{border:none;border-top:1px solid #1e2535;margin:18px 0}
       `}</style>
 
       {showNamePopup && <NamePopup onComplete={handleNameComplete} />}
 
       {/* SIDEBAR */}
       <div style={{ width: sidebarOpen ? '260px' : '0', minWidth: sidebarOpen ? '260px' : '0', background: '#0d1018', borderRight: '1px solid #1e2535', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width 0.28s cubic-bezier(0.4,0,0.2,1), min-width 0.28s', flexShrink: 0 }}>
-        {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 16px 14px', borderBottom: '1px solid #1e2535' }}>
           <a href="/landing" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
             <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 200, fontSize: '16px', color: '#e8eaf0', display: 'flex', alignItems: 'center' }}>
@@ -312,13 +304,11 @@ export default function ChatPage() {
           <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '17px' }}>◀</button>
         </div>
 
-        {/* New Chat */}
         <button onClick={newChat} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', margin: '4px 8px 8px', borderRadius: '9px', background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '14px', fontFamily: "'Outfit',sans-serif", textAlign: 'left', width: 'calc(100% - 16px)' }} className="sb-item">
           <div style={{ width: '20px', height: '20px', borderRadius: '5px', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: '#0d0a04', fontWeight: 700, flexShrink: 0 }}>+</div>
           New conversation
         </button>
 
-        {/* Nav */}
         <div style={{ padding: '0 8px 8px', borderBottom: '1px solid #1e2535' }}>
           {NAV.map(item => (
             <a key={item.href} href={item.href} className="nav-a" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '7px', color: item.active ? '#e8eaf0' : '#9aa3b2', background: item.active ? '#161b28' : 'transparent', fontSize: '13.5px', textDecoration: 'none', fontWeight: 300, marginBottom: '2px' }}>
@@ -327,7 +317,6 @@ export default function ChatPage() {
           ))}
         </div>
 
-        {/* Real Conversation History */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px 4px' }}>
           {conversations.length === 0 ? (
             <div style={{ padding: '20px 10px', fontSize: '12px', color: '#3a4258', textAlign: 'center', fontWeight: 300, lineHeight: 1.6 }}>
@@ -348,7 +337,6 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Bottom */}
         <div style={{ borderTop: '1px solid #1e2535', padding: '10px 10px 14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4a5568', marginBottom: '6px', padding: '0 2px' }}>
             <span>Daily queries</span>
@@ -369,7 +357,6 @@ export default function ChatPage() {
 
       {/* MAIN */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', minWidth: 0 }}>
-        {/* Topbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 16px', height: '56px', minHeight: '56px', borderBottom: '1px solid #1e2535' }}>
           <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ width: '32px', height: '32px', borderRadius: '7px', background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '16px', flexShrink: 0 }}>☰</button>
           <span style={{ fontSize: '15px', fontWeight: 500, color: '#e8eaf0' }}>Legal Q&A</span>
@@ -380,7 +367,6 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Uploaded doc banner */}
         {uploadedDoc && (
           <div style={{ padding: '8px 20px', background: 'rgba(126,184,247,0.06)', borderBottom: '1px solid rgba(126,184,247,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '12.5px', color: '#7eb8f7', fontWeight: 300 }}>📎 {uploadedDoc.name} — asking about this document</span>
@@ -388,7 +374,6 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
           {messages.length === 0 ? (
             <div style={{ maxWidth: '760px', margin: '0 auto', padding: '52px 20px 0' }}>
@@ -428,8 +413,11 @@ export default function ChatPage() {
                           </div>
                         ) : (
                           <div className="ai-md" style={{ fontSize: '15px', color: '#e8eaf0' }}>
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
-                            {msg.streaming && <span style={{ display: 'inline-block', width: '2px', height: '15px', background: '#e8c96d', marginLeft: '2px', verticalAlign: 'middle', animation: 'blink 0.85s ease infinite' }}></span>}
+                            {msg.streaming ? (
+                              <div style={{ whiteSpace: 'pre-wrap', fontWeight: 300, lineHeight: 1.8 }}>{msg.content}<span style={{ display: 'inline-block', width: '2px', height: '15px', background: '#e8c96d', marginLeft: '2px', verticalAlign: 'middle', animation: 'blink 0.85s ease infinite' }}></span></div>
+                            ) : (
+                              <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            )}
                           </div>
                         )}
                       </div>
@@ -442,7 +430,6 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Input */}
         <div style={{ borderTop: '1px solid #1e2535', padding: '12px 20px 16px', background: '#080a0f' }}>
           <div style={{ maxWidth: '760px', margin: '0 auto', background: '#0d1018', border: '1px solid #1e2535', borderRadius: '14px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <textarea ref={textareaRef} value={input} onChange={handleInput} onKeyDown={handleKey} placeholder="Ask any legal question… or upload a document 📎" rows={1}
@@ -450,7 +437,7 @@ export default function ChatPage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: '5px' }}>
                 <input ref={fileInputRef} type="file" accept=".txt,.pdf,.doc,.docx" onChange={handleFileUpload} style={{ display: 'none' }} />
-                <button onClick={() => fileInputRef.current?.click()} title="Upload document for RAG"
+                <button onClick={() => fileInputRef.current?.click()}
                   style={{ width: '28px', height: '28px', borderRadius: '7px', background: uploadedDoc ? 'rgba(126,184,247,0.1)' : 'none', border: uploadedDoc ? '1px solid rgba(126,184,247,0.3)' : 'none', color: uploadedDoc ? '#7eb8f7' : '#4a5568', cursor: 'pointer', fontSize: '14px' }}>📎</button>
                 <button style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'none', border: 'none', color: '#4a5568', cursor: 'pointer', fontSize: '14px' }}>🎤</button>
               </div>
