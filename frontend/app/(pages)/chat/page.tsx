@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { trackPageVisit, trackQuery, getStoredUser, createUser, storeUser } from '../../lib/supabase';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -11,6 +12,13 @@ interface Message {
   streaming?: boolean;
 }
 
+interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  timestamp: Date;
+}
+
 const SUGGESTIONS = [
   { icon: '🏠', text: 'What are my rights if my landlord refuses to return the security deposit?' },
   { icon: '📋', text: 'Can my employer legally deduct salary without written notice?' },
@@ -18,13 +26,8 @@ const SUGGESTIONS = [
   { icon: '💳', text: 'Explain Section 138 NI Act — cheque bounce case and remedies.' },
 ];
 
-const HISTORY = {
-  Today: ['Security deposit — tenant rights', 'NDA clause analysis', 'FIR filing under BNSS procedure'],
-  Yesterday: ['Cheque bounce — Section 138 NI Act', 'Consumer complaint RERA violation', 'Cybercrime reporting procedure'],
-  'This Week': ['Rental agreement stamp duty Maharashtra', 'Employment bond enforceability India', 'Divorce petition grounds Hindu Marriage Act'],
-};
-
 const CHIPS = ['BNS', 'BNSS', 'Constitution', 'IPC', 'CrPC', 'State Laws'];
+
 const NAV = [
   { icon: '💬', label: 'Legal Q&A', href: '/chat', active: true },
   { icon: '📄', label: 'Contract Analyzer', href: '/contract' },
@@ -33,11 +36,10 @@ const NAV = [
   { icon: '⚖️', label: 'Bare Acts', href: '/bareacts' },
 ];
 
-// ── Name Capture Popup ──
+// Name Popup
 function NamePopup({ onComplete }: { onComplete: (name: string) => void }) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-
   const handleSubmit = async () => {
     const trimmed = name.trim() || 'User';
     setLoading(true);
@@ -46,28 +48,21 @@ function NamePopup({ onComplete }: { onComplete: (name: string) => void }) {
     setLoading(false);
     onComplete(trimmed);
   };
-
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(8,10,15,0.88)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <style>{`
-        @keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
-        .ni::placeholder{color:#4a5568} .ni:focus{border-color:rgba(201,168,76,0.4)!important}
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=Outfit:wght@300;400;500;600&display=swap');
-      `}</style>
-      <div style={{ background: '#0d1018', border: '1px solid #2a3347', borderRadius: '20px', padding: '48px 44px', width: '100%', maxWidth: '420px', boxShadow: '0 32px 80px rgba(0,0,0,0.6)', animation: 'slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1)', position: 'relative' }}>
+      <div style={{ background: '#0d1018', border: '1px solid #2a3347', borderRadius: '20px', padding: '48px 44px', width: '100%', maxWidth: '420px', boxShadow: '0 32px 80px rgba(0,0,0,0.6)', position: 'relative' }}>
         <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: '200px', height: '1px', background: 'linear-gradient(90deg,transparent,rgba(201,168,76,0.4),transparent)' }}></div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '28px' }}>
-          <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 200, fontSize: '18px', letterSpacing: '0.26em', color: '#e8eaf0', display: 'flex', alignItems: 'center' }}>
+        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 200, fontSize: '18px', letterSpacing: '0.26em', color: '#e8eaf0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
             <span style={{ letterSpacing: '0.18em' }}>Z</span>
             <span style={{ display: 'inline-block', width: '13px', height: '13px', border: '1.5px solid #7eb8f7', borderRadius: '50%', margin: '0 3px', boxShadow: '0 0 8px rgba(126,184,247,0.3)' }}></span>
             <span style={{ letterSpacing: '0.18em' }}>LVYN</span>
           </div>
-        </div>
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '26px', fontWeight: 300, color: '#e8eaf0', marginBottom: '8px' }}>Welcome to <em style={{ color: '#e8c96d' }}>Zolvyn AI</em></div>
           <p style={{ fontSize: '13.5px', color: '#7a8499', fontWeight: 300, lineHeight: 1.65 }}>India's legal intelligence platform. What should we call you?</p>
         </div>
-        <input className="ni" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Enter your name…" autoFocus style={{ width: '100%', background: '#111520', border: '1.5px solid #1e2535', borderRadius: '11px', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", fontSize: '15px', fontWeight: 300, padding: '13px 16px', outline: 'none', marginBottom: '12px', transition: 'border-color 0.2s' }} />
+        <input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Enter your name…" autoFocus
+          style={{ width: '100%', background: '#111520', border: '1.5px solid #1e2535', borderRadius: '11px', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", fontSize: '15px', fontWeight: 300, padding: '13px 16px', outline: 'none', marginBottom: '12px' }} />
         <button onClick={handleSubmit} disabled={loading} style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', color: '#0d0a00', fontSize: '14px', fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit',sans-serif", marginBottom: '12px' }}>
           {loading ? 'Setting up…' : 'Start for free →'}
         </button>
@@ -81,26 +76,61 @@ function NamePopup({ onComplete }: { onComplete: (name: string) => void }) {
 }
 
 export default function ChatPage() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConvId, setCurrentConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeChips, setActiveChips] = useState(['BNS', 'Constitution']);
-  const [activeHistory, setActiveHistory] = useState('Security deposit — tenant rights');
   const [userName, setUserName] = useState<string | null>(null);
   const [showNamePopup, setShowNamePopup] = useState(false);
+  const [uploadedDoc, setUploadedDoc] = useState<{ name: string; content: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load conversations from localStorage
   useEffect(() => {
-    const user = getStoredUser();
-    if (user) {
-      setUserName(user.name);
-      trackPageVisit('chat');
-    } else {
-      setTimeout(() => setShowNamePopup(true), 600);
+    const saved = localStorage.getItem('zolvyn_conversations');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setConversations(parsed.map((c: any) => ({ ...c, timestamp: new Date(c.timestamp) })));
+      } catch {}
     }
+    const user = getStoredUser();
+    if (user) { setUserName(user.name); trackPageVisit('chat'); }
+    else setTimeout(() => setShowNamePopup(true), 600);
   }, []);
+
+  // Save conversations to localStorage
+  useEffect(() => {
+    if (conversations.length > 0) localStorage.setItem('zolvyn_conversations', JSON.stringify(conversations));
+  }, [conversations]);
+
+  const saveConversation = (msgs: Message[], convId: string | null, firstQuestion: string) => {
+    const id = convId || crypto.randomUUID();
+    const title = firstQuestion.length > 45 ? firstQuestion.slice(0, 45) + '…' : firstQuestion;
+    setConversations(prev => {
+      const existing = prev.find(c => c.id === id);
+      if (existing) return prev.map(c => c.id === id ? { ...c, messages: msgs } : c);
+      return [{ id, title, messages: msgs, timestamp: new Date() }, ...prev];
+    });
+    return id;
+  };
+
+  const loadConversation = (conv: Conversation) => {
+    setCurrentConvId(conv.id);
+    setMessages(conv.messages);
+  };
+
+  const newChat = () => {
+    setCurrentConvId(null);
+    setMessages([]);
+    setInput('');
+    setUploadedDoc(null);
+  };
 
   const handleNameComplete = (name: string) => {
     setUserName(name);
@@ -125,23 +155,56 @@ export default function ChatPage() {
 
   const toggleChip = (chip: string) => setActiveChips(prev => prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip]);
 
+  // Handle file upload for RAG
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      setUploadedDoc({ name: file.name, content: content.slice(0, 8000) });
+    };
+    reader.readAsText(file);
+  };
+
   const sendMessage = async (question?: string) => {
     const q = question || input.trim();
     if (!q || streaming) return;
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setStreaming(true);
-    setMessages(prev => [...prev, { role: 'user', content: q }, { role: 'ai', content: '', streaming: true }]);
+
+    const userMsg: Message = { role: 'user', content: q };
+    const aiMsg: Message = { role: 'ai', content: '', streaming: true };
+    const newMessages = [...messages, userMsg, aiMsg];
+    setMessages(newMessages);
     trackQuery('chat', q);
+
+    // Build context with uploaded doc if any
+    let questionWithContext = q;
+    if (uploadedDoc) {
+      questionWithContext = `[User uploaded document: "${uploadedDoc.name}"]\n\nDocument content:\n${uploadedDoc.content}\n\n---\n\nUser question: ${q}`;
+    }
+
+    // Build history for context (last 6 messages)
+    const history = messages.slice(-6).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
 
     try {
       const response = await fetch(`${API_URL}/api/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q, context_laws: activeChips.length ? activeChips : ['BNS', 'BNSS', 'IPC', 'Constitution'], state: 'All India', history: [] }),
+        body: JSON.stringify({
+          question: questionWithContext,
+          context_laws: activeChips.length ? activeChips : ['BNS', 'BNSS', 'IPC', 'Constitution'],
+          state: 'All India',
+          history,
+          max_tokens: 4096,
+        }),
       });
+
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -150,8 +213,20 @@ export default function ChatPage() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.token) { fullText += data.token; setMessages(prev => { const u = [...prev]; u[u.length - 1] = { role: 'ai', content: fullText, streaming: true }; return u; }); }
-              if (data.done) { setMessages(prev => { const u = [...prev]; u[u.length - 1] = { role: 'ai', content: fullText, streaming: false }; return u; }); }
+              if (data.token) {
+                fullText += data.token;
+                setMessages(prev => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: 'ai', content: fullText, streaming: true };
+                  return updated;
+                });
+              }
+              if (data.done) {
+                const finalMessages = [...messages, userMsg, { role: 'ai' as const, content: fullText, streaming: false }];
+                setMessages(finalMessages);
+                const convId = saveConversation(finalMessages, currentConvId, q);
+                if (!currentConvId) setCurrentConvId(convId);
+              }
             } catch {}
           }
         }
@@ -163,6 +238,23 @@ export default function ChatPage() {
   };
 
   const handleKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
+
+  // Group conversations by date
+  const groupConversations = () => {
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    const groups: Record<string, Conversation[]> = { Today: [], Yesterday: [], 'This Week': [], Older: [] };
+    conversations.forEach(c => {
+      const d = new Date(c.timestamp).toDateString();
+      if (d === today) groups['Today'].push(c);
+      else if (d === yesterday) groups['Yesterday'].push(c);
+      else if (Date.now() - new Date(c.timestamp).getTime() < 7 * 86400000) groups['This Week'].push(c);
+      else groups['Older'].push(c);
+    });
+    return groups;
+  };
+
+  const groups = groupConversations();
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#080a0f', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", overflow: 'hidden' }}>
@@ -177,12 +269,36 @@ export default function ChatPage() {
         .sb-item:hover{background:#161b28 !important;color:#e8eaf0 !important}
         .ec:hover{border-color:#2a3347 !important;background:rgba(255,255,255,0.02) !important}
         .nav-a:hover{background:#161b28 !important;color:#e8eaf0 !important}
+        .conv-item:hover{background:#161b28 !important}
+
+        /* Markdown styles */
+        .ai-md h1,.ai-md h2,.ai-md h3{font-family:'Cormorant Garamond',serif;font-weight:500;color:#e8eaf0;margin:16px 0 8px;line-height:1.3}
+        .ai-md h1{font-size:22px} .ai-md h2{font-size:19px} .ai-md h3{font-size:17px}
+        .ai-md p{margin-bottom:12px;line-height:1.75;font-weight:300}
+        .ai-md p:last-child{margin-bottom:0}
+        .ai-md strong{color:#e8eaf0;font-weight:500}
+        .ai-md em{color:#e8c96d;font-style:italic}
+        .ai-md ul,.ai-md ol{padding-left:20px;margin-bottom:12px}
+        .ai-md li{margin-bottom:6px;line-height:1.65;font-weight:300;color:#e8eaf0}
+        .ai-md ul li{list-style:disc} .ai-md ol li{list-style:decimal}
+        .ai-md code{background:#161b28;border:1px solid #2a3347;border-radius:4px;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#7eb8f7}
+        .ai-md pre{background:#111520;border:1px solid #1e2535;border-radius:10px;padding:16px;overflow-x:auto;margin:12px 0}
+        .ai-md pre code{background:none;border:none;padding:0;font-size:13px;color:#e8eaf0}
+        .ai-md blockquote{border-left:3px solid #c9a84c;padding:8px 16px;margin:12px 0;color:#9aa3b2;background:rgba(201,168,76,0.04);border-radius:0 8px 8px 0}
+        .ai-md table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px;border-radius:10px;overflow:hidden}
+        .ai-md th{background:#161b28;padding:10px 14px;text-align:left;font-weight:500;color:#9aa3b2;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;border-bottom:1px solid #1e2535}
+        .ai-md td{padding:10px 14px;border-bottom:1px solid rgba(30,37,53,0.5);color:#e8eaf0;line-height:1.5;font-size:13.5px;font-weight:300}
+        .ai-md tr:last-child td{border-bottom:none}
+        .ai-md tr:hover td{background:rgba(255,255,255,0.015)}
+        .ai-md a{color:#7eb8f7;text-decoration:none}
+        .ai-md hr{border:none;border-top:1px solid #1e2535;margin:16px 0}
       `}</style>
 
       {showNamePopup && <NamePopup onComplete={handleNameComplete} />}
 
       {/* SIDEBAR */}
       <div style={{ width: sidebarOpen ? '260px' : '0', minWidth: sidebarOpen ? '260px' : '0', background: '#0d1018', borderRight: '1px solid #1e2535', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width 0.28s cubic-bezier(0.4,0,0.2,1), min-width 0.28s', flexShrink: 0 }}>
+        {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 16px 14px', borderBottom: '1px solid #1e2535' }}>
           <a href="/landing" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
             <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 200, fontSize: '16px', color: '#e8eaf0', display: 'flex', alignItems: 'center' }}>
@@ -196,11 +312,13 @@ export default function ChatPage() {
           <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '17px' }}>◀</button>
         </div>
 
-        <button onClick={() => setMessages([])} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', margin: '4px 8px 8px', borderRadius: '9px', background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '14px', fontFamily: "'Outfit',sans-serif", textAlign: 'left', width: 'calc(100% - 16px)' }}>
+        {/* New Chat */}
+        <button onClick={newChat} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', margin: '4px 8px 8px', borderRadius: '9px', background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '14px', fontFamily: "'Outfit',sans-serif", textAlign: 'left', width: 'calc(100% - 16px)' }} className="sb-item">
           <div style={{ width: '20px', height: '20px', borderRadius: '5px', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: '#0d0a04', fontWeight: 700, flexShrink: 0 }}>+</div>
           New conversation
         </button>
 
+        {/* Nav */}
         <div style={{ padding: '0 8px 8px', borderBottom: '1px solid #1e2535' }}>
           {NAV.map(item => (
             <a key={item.href} href={item.href} className="nav-a" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '7px', color: item.active ? '#e8eaf0' : '#9aa3b2', background: item.active ? '#161b28' : 'transparent', fontSize: '13.5px', textDecoration: 'none', fontWeight: 300, marginBottom: '2px' }}>
@@ -209,29 +327,34 @@ export default function ChatPage() {
           ))}
         </div>
 
+        {/* Real Conversation History */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px 4px' }}>
-          {Object.entries(HISTORY).map(([section, items]) => (
-            <div key={section}>
-              <div style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4a5568', padding: '10px 10px 5px', fontWeight: 500 }}>{section}</div>
-              {items.map(item => (
-                <div key={item} onClick={() => setActiveHistory(item)} className="sb-item" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '8px', cursor: 'pointer', color: activeHistory === item ? '#e8eaf0' : '#9aa3b2', fontSize: '13.5px', fontWeight: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '2px', background: activeHistory === item ? 'rgba(201,168,76,0.07)' : 'transparent' }}>
-                  <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: activeHistory === item ? '#e8c96d' : '#4a5568', flexShrink: 0, boxShadow: activeHistory === item ? '0 0 6px #e8c96d' : 'none' }}></div>
-                  {item}
-                </div>
-              ))}
+          {conversations.length === 0 ? (
+            <div style={{ padding: '20px 10px', fontSize: '12px', color: '#3a4258', textAlign: 'center', fontWeight: 300, lineHeight: 1.6 }}>
+              Your conversations will appear here after your first question
             </div>
-          ))}
+          ) : (
+            Object.entries(groups).map(([section, convs]) => convs.length === 0 ? null : (
+              <div key={section}>
+                <div style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4a5568', padding: '10px 10px 5px', fontWeight: 500 }}>{section}</div>
+                {convs.map(conv => (
+                  <div key={conv.id} onClick={() => loadConversation(conv)} className="conv-item"
+                    style={{ padding: '7px 10px', borderRadius: '8px', cursor: 'pointer', color: currentConvId === conv.id ? '#e8eaf0' : '#9aa3b2', fontSize: '13px', fontWeight: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '2px', background: currentConvId === conv.id ? 'rgba(201,168,76,0.07)' : 'transparent', transition: 'background 0.15s' }}>
+                    {conv.title}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
         </div>
 
+        {/* Bottom */}
         <div style={{ borderTop: '1px solid #1e2535', padding: '10px 10px 14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4a5568', marginBottom: '6px', padding: '0 2px' }}>
             <span>Daily queries</span>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px' }}>3 / 5 free</span>
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px' }}>Free plan</span>
           </div>
-          <div style={{ height: '2px', background: '#1e2535', borderRadius: '2px', marginBottom: '10px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: '60%', background: 'linear-gradient(90deg,#c9a84c,#e8c96d)' }}></div>
-          </div>
-          <button onClick={() => window.location.href = '/upgrade'} style={{ width: '100%', padding: '10px 14px', borderRadius: '9px', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: "'Outfit',sans-serif", fontSize: '13px', fontWeight: 600, color: '#0d0a04', letterSpacing: '0.02em' }}>
+          <button onClick={() => window.location.href = '/upgrade'} style={{ width: '100%', padding: '10px 14px', borderRadius: '9px', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: "'Outfit',sans-serif", fontSize: '13px', fontWeight: 600, color: '#0d0a04' }}>
             👑 Upgrade to Pro
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginTop: '10px', padding: '4px 2px' }}>
@@ -246,6 +369,7 @@ export default function ChatPage() {
 
       {/* MAIN */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', minWidth: 0 }}>
+        {/* Topbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 16px', height: '56px', minHeight: '56px', borderBottom: '1px solid #1e2535' }}>
           <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ width: '32px', height: '32px', borderRadius: '7px', background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '16px', flexShrink: 0 }}>☰</button>
           <span style={{ fontSize: '15px', fontWeight: 500, color: '#e8eaf0' }}>Legal Q&A</span>
@@ -254,12 +378,17 @@ export default function ChatPage() {
               <div key={chip} onClick={() => toggleChip(chip)} style={{ fontSize: '11px', fontFamily: "'JetBrains Mono',monospace", padding: '3px 9px', borderRadius: '20px', whiteSpace: 'nowrap', background: activeChips.includes(chip) ? 'rgba(201,168,76,0.07)' : '#161b28', border: `1px solid ${activeChips.includes(chip) ? 'rgba(201,168,76,0.25)' : '#1e2535'}`, color: activeChips.includes(chip) ? '#e8c96d' : '#4a5568', cursor: 'pointer' }}>{chip}</div>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto', flexShrink: 0 }}>
-            <button style={{ width: '30px', height: '30px', borderRadius: '7px', background: 'none', border: 'none', color: '#4a5568', cursor: 'pointer', fontSize: '14px' }}>🔗</button>
-            <button style={{ width: '30px', height: '30px', borderRadius: '7px', background: 'none', border: 'none', color: '#4a5568', cursor: 'pointer', fontSize: '14px' }}>⬇</button>
-          </div>
         </div>
 
+        {/* Uploaded doc banner */}
+        {uploadedDoc && (
+          <div style={{ padding: '8px 20px', background: 'rgba(126,184,247,0.06)', borderBottom: '1px solid rgba(126,184,247,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '12.5px', color: '#7eb8f7', fontWeight: 300 }}>📎 {uploadedDoc.name} — asking about this document</span>
+            <button onClick={() => setUploadedDoc(null)} style={{ background: 'none', border: 'none', color: '#4a5568', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+          </div>
+        )}
+
+        {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
           {messages.length === 0 ? (
             <div style={{ maxWidth: '760px', margin: '0 auto', padding: '52px 20px 0' }}>
@@ -298,8 +427,8 @@ export default function ChatPage() {
                             </div>
                           </div>
                         ) : (
-                          <div style={{ fontSize: '15px', lineHeight: 1.75, color: '#e8eaf0', fontWeight: 300, whiteSpace: 'pre-wrap' }}>
-                            {msg.content}
+                          <div className="ai-md" style={{ fontSize: '15px', color: '#e8eaf0' }}>
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
                             {msg.streaming && <span style={{ display: 'inline-block', width: '2px', height: '15px', background: '#e8c96d', marginLeft: '2px', verticalAlign: 'middle', animation: 'blink 0.85s ease infinite' }}></span>}
                           </div>
                         )}
@@ -313,15 +442,20 @@ export default function ChatPage() {
           )}
         </div>
 
+        {/* Input */}
         <div style={{ borderTop: '1px solid #1e2535', padding: '12px 20px 16px', background: '#080a0f' }}>
           <div style={{ maxWidth: '760px', margin: '0 auto', background: '#0d1018', border: '1px solid #1e2535', borderRadius: '14px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <textarea ref={textareaRef} value={input} onChange={handleInput} onKeyDown={handleKey} placeholder="Ask any legal question…" rows={1} style={{ width: '100%', background: 'none', border: 'none', outline: 'none', fontFamily: "'Outfit',sans-serif", fontSize: '15px', color: '#e8eaf0', resize: 'none', lineHeight: 1.6, maxHeight: '200px', overflowY: 'auto', fontWeight: 300, minHeight: '24px' }} />
+            <textarea ref={textareaRef} value={input} onChange={handleInput} onKeyDown={handleKey} placeholder="Ask any legal question… or upload a document 📎" rows={1}
+              style={{ width: '100%', background: 'none', border: 'none', outline: 'none', fontFamily: "'Outfit',sans-serif", fontSize: '15px', color: '#e8eaf0', resize: 'none', lineHeight: 1.6, maxHeight: '200px', overflowY: 'auto', fontWeight: 300, minHeight: '24px' }} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: '5px' }}>
-                <button style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'none', border: 'none', color: '#4a5568', cursor: 'pointer', fontSize: '14px' }}>📎</button>
+                <input ref={fileInputRef} type="file" accept=".txt,.pdf,.doc,.docx" onChange={handleFileUpload} style={{ display: 'none' }} />
+                <button onClick={() => fileInputRef.current?.click()} title="Upload document for RAG"
+                  style={{ width: '28px', height: '28px', borderRadius: '7px', background: uploadedDoc ? 'rgba(126,184,247,0.1)' : 'none', border: uploadedDoc ? '1px solid rgba(126,184,247,0.3)' : 'none', color: uploadedDoc ? '#7eb8f7' : '#4a5568', cursor: 'pointer', fontSize: '14px' }}>📎</button>
                 <button style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'none', border: 'none', color: '#4a5568', cursor: 'pointer', fontSize: '14px' }}>🎤</button>
               </div>
-              <button onClick={() => sendMessage()} disabled={streaming || !input.trim()} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: streaming || !input.trim() ? '#1e2535' : 'linear-gradient(135deg,#4caf82,#6ee7a8)', color: streaming || !input.trim() ? '#4a5568' : '#061a10', cursor: streaming || !input.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
+              <button onClick={() => sendMessage()} disabled={streaming || !input.trim()}
+                style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: streaming || !input.trim() ? '#1e2535' : 'linear-gradient(135deg,#4caf82,#6ee7a8)', color: streaming || !input.trim() ? '#4a5568' : '#061a10', cursor: streaming || !input.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14.5 8L1.5 1.5L5 8L1.5 14.5L14.5 8Z" fill="currentColor"/></svg>
               </button>
             </div>
