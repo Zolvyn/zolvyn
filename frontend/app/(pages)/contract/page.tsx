@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -33,223 +33,437 @@ export default function ContractPage() {
   const [result, setResult] = useState<ContractResult | null>(null);
   const [error, setError] = useState('');
   const [activeResultTab, setActiveResultTab] = useState(0);
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const handleFile = async (file: File) => {
+    if (!file) return;
+    const maxSize = 5 * 1024 * 1024; // 5MB limit
+    if (file.size > maxSize) {
+      setError('File too large. Maximum size is 5MB.');
+      return;
+    }
+    const allowed = ['.pdf', '.docx', '.txt', '.doc'];
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!allowed.includes(ext)) {
+      setError('Only PDF, DOCX, and TXT files are supported.');
+      return;
+    }
+    setUploadedFile({ name: file.name, size: formatFileSize(file.size) });
+    setError('');
+
+    // Read as text for TXT files, otherwise send to backend upload endpoint
+    if (ext === '.txt') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setText(e.target?.result as string);
+        setTab('paste');
+      };
+      reader.readAsText(file);
+    } else {
+      // For PDF/DOCX — send to backend /api/contract/upload
+      setState('analyzing');
+      setError('');
+      setResult(null);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch(`${API_URL}/api/contract/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+          setResult(json.data);
+          setState('done');
+        } else {
+          throw new Error(json.detail || 'Analysis failed');
+        }
+      } catch (e: any) {
+        setError(e.message || 'Failed to analyze file');
+        setState('error');
+        setUploadedFile(null);
+      }
+    }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
 
   const analyze = async () => {
-    if (!text.trim() || text.trim().length < 50) { setError('Please paste at least 50 characters of contract text.'); return; }
-    setState('analyzing'); setError(''); setResult(null);
+    if (!text.trim() || text.trim().length < 50) {
+      setError('Please paste at least 50 characters of contract text.');
+      return;
+    }
+    setState('analyzing');
+    setError('');
+    setResult(null);
     try {
       const res = await fetch(`${API_URL}/api/contract`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, analysis_type: 'full' }),
       });
       const json = await res.json();
-      if (json.status === 'success') { setResult(json.data); setState('done'); }
-      else { throw new Error('Analysis failed'); }
-    } catch (e: any) { setError(e.message || 'Failed to analyze'); setState('error'); }
+      if (json.status === 'success') {
+        setResult(json.data);
+        setState('done');
+      } else {
+        throw new Error('Analysis failed');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to analyze');
+      setState('error');
+    }
   };
 
-  const riskColor = (r: string) => r === 'HIGH' ? '#e05252' : r === 'MEDIUM' ? '#e8a030' : '#4caf82';
-  const riskBg = (r: string) => r === 'HIGH' ? 'rgba(224,82,82,0.1)' : r === 'MEDIUM' ? 'rgba(232,160,48,0.1)' : 'rgba(76,175,130,0.1)';
+  const reset = () => {
+    setState('idle');
+    setResult(null);
+    setText('');
+    setUploadedFile(null);
+    setError('');
+    setActiveResultTab(0);
+  };
+
+  const riskColor = (r: string) =>
+    r === 'HIGH' ? '#f04444' : r === 'MEDIUM' ? '#f59e0b' : '#22c55e';
+  const riskBg = (r: string) =>
+    r === 'HIGH' ? 'rgba(240,68,68,0.06)' : r === 'MEDIUM' ? 'rgba(245,158,11,0.06)' : 'rgba(34,197,94,0.06)';
+  const riskBorder = (r: string) =>
+    r === 'HIGH' ? 'rgba(240,68,68,0.2)' : r === 'MEDIUM' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)';
+
+  const sevColor = (s: string) =>
+    s === 'HIGH' ? '#f04444' : s === 'MEDIUM' ? '#f59e0b' : '#22c55e';
+
+  const statusColor = (s: string) =>
+    s === 'COMPLIANT' ? '#22c55e' : s === 'NON_COMPLIANT' ? '#f04444' : '#f59e0b';
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#080a0f', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', background: '#080a0f', color: '#e8eaf0', fontFamily: "'Inter',sans-serif", overflow: 'hidden' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
-        ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-thumb{background:#2a3347;border-radius:4px}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes gavel-swing{from{transform:rotate(-18deg)}to{transform:rotate(12deg)}}
-        @keyframes dot-bounce{0%,80%,100%{transform:translateY(0);opacity:0.4}40%{transform:translateY(-8px);opacity:1}}
-        @keyframes ring-pulse{0%{transform:scale(1);opacity:0.5}50%{transform:scale(1.3);opacity:0.15}100%{transform:scale(1);opacity:0.5}}
+        ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#2a3347;border-radius:4px}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
         .nav-item:hover{background:#161b28 !important;color:#e8eaf0 !important}
-        .result-tab:hover{color:#e8eaf0 !important}
-        .flag-row:hover{background:rgba(255,255,255,0.02) !important}
-        textarea::placeholder{color:#4a5568}
+        .tab-btn:hover{color:#e8eaf0 !important}
+        .row-hover:hover{background:rgba(255,255,255,0.018) !important}
+        textarea::placeholder{color:#3a4258}
+        .upload-zone:hover{border-color:#2a3a55 !important;background:#0f1420 !important}
       `}</style>
 
       {/* SIDEBAR */}
-      <div style={{ width: sidebarOpen ? '260px' : '0', minWidth: sidebarOpen ? '260px' : '0', background: '#0d1018', borderRight: '1px solid #1e2535', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width 0.28s, min-width 0.28s', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 16px 14px', borderBottom: '1px solid #1e2535' }}>
+      <div style={{ width: sidebarOpen ? '252px' : '0', minWidth: sidebarOpen ? '252px' : '0', background: '#0a0d14', borderRight: '1px solid #1a2030', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width 0.25s, min-width 0.25s', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 14px', borderBottom: '1px solid #1a2030' }}>
           <a href="/landing" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
-            <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 200, fontSize: '16px', color: '#e8eaf0', display: 'flex', alignItems: 'center' }}>
-              <span style={{ letterSpacing: '0.18em' }}>Z</span>
-              <span style={{ display: 'inline-block', width: '13px', height: '13px', border: '1.5px solid #7eb8f7', borderRadius: '50%', margin: '0 3px', boxShadow: '0 0 8px rgba(126,184,247,0.3)' }}></span>
-              <span style={{ letterSpacing: '0.18em' }}>LVYN</span>
+            <div style={{ fontFamily: "'Inter',sans-serif", fontWeight: 200, fontSize: '15px', color: '#e8eaf0', letterSpacing: '0.22em', display: 'flex', alignItems: 'center' }}>
+              <span>Z</span>
+              <span style={{ display: 'inline-block', width: '11px', height: '11px', border: '1.5px solid #7eb8f7', borderRadius: '50%', margin: '0 3px', boxShadow: '0 0 6px rgba(126,184,247,0.3)' }}></span>
+              <span>LVYN</span>
             </div>
-            <div style={{ width: '1px', height: '22px', background: '#2a3347' }}></div>
-            <div style={{ fontSize: '9.5px', letterSpacing: '0.18em', color: '#4a5568', textTransform: 'uppercase', fontWeight: 300 }}>Legal Intelligence</div>
+            <div style={{ width: '1px', height: '18px', background: '#1a2030' }}></div>
+            <div style={{ fontSize: '9px', letterSpacing: '0.14em', color: '#3a4258', textTransform: 'uppercase', fontWeight: 400 }}>Legal Intelligence</div>
           </a>
-          <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '14px' }}>◀</button>
+          <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', color: '#4a5568', cursor: 'pointer', fontSize: '13px' }}>◀</button>
         </div>
-        <div style={{ padding: '10px 10px 6px', borderBottom: '1px solid #1e2535' }}>
+        <div style={{ padding: '8px 8px 6px', borderBottom: '1px solid #1a2030' }}>
           {NAV.map(item => (
-            <a key={item.href} href={item.href} className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '7px', color: item.active ? '#e8eaf0' : '#9aa3b2', background: item.active ? '#161b28' : 'transparent', fontSize: '13.5px', textDecoration: 'none', fontWeight: 300, marginBottom: '2px' }}>
-              <span style={{ opacity: 0.8 }}>{item.icon}</span><span>{item.label}</span>
+            <a key={item.href} href={item.href} className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '9px', padding: '7px 10px', borderRadius: '6px', color: item.active ? '#e8eaf0' : '#6b7280', background: item.active ? '#161b28' : 'transparent', fontSize: '13px', textDecoration: 'none', fontWeight: item.active ? 500 : 400, marginBottom: '1px', transition: 'all 0.15s' }}>
+              <span style={{ fontSize: '13px' }}>{item.icon}</span><span>{item.label}</span>
             </a>
           ))}
         </div>
-        <div style={{ flex: 1 }}></div>
-        <div style={{ borderTop: '1px solid #1e2535', padding: '12px' }}>
-          <button onClick={() => window.location.href = '/upgrade'} style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#0d0a04', fontFamily: "'Outfit',sans-serif" }}>👑 Upgrade to Pro</button>
+        <div style={{ flex: 1 }} />
+        <div style={{ borderTop: '1px solid #1a2030', padding: '12px' }}>
+          <button onClick={() => window.location.href = '/upgrade'} style={{ width: '100%', padding: '9px', borderRadius: '7px', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', border: 'none', cursor: 'pointer', fontSize: '12.5px', fontWeight: 600, color: '#0d0a04', fontFamily: "'Inter',sans-serif" }}>👑 Upgrade to Pro</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginTop: '10px' }}>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#0d0a04' }}>Z</div>
-            <div><div style={{ fontSize: '13px', color: '#e8eaf0', fontWeight: 500 }}>Zolvyn User</div><div style={{ fontSize: '11px', color: '#4a5568' }}>Free plan</div></div>
+            <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#0d0a04' }}>Z</div>
+            <div><div style={{ fontSize: '12.5px', color: '#e8eaf0', fontWeight: 500 }}>Zolvyn User</div><div style={{ fontSize: '11px', color: '#3a4258' }}>Free plan</div></div>
           </div>
         </div>
       </div>
 
       {/* MAIN */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', minWidth: 0 }}>
+
         {/* Topbar */}
-        <div style={{ height: '56px', minHeight: '56px', background: '#0d1018', borderBottom: '1px solid #1e2535', display: 'flex', alignItems: 'center', padding: '0 20px', gap: '14px' }}>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'none', border: 'none', color: '#9aa3b2', cursor: 'pointer', fontSize: '18px' }}>☰</button>
-          <span style={{ fontSize: '15px', fontWeight: 500, color: '#e8eaf0' }}>Contract Analyzer</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: '#161b28', border: '1px solid #1e2535', fontSize: '11.5px', color: '#9aa3b2' }}>
-            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4caf82' }}></div>
+        <div style={{ height: '52px', minHeight: '52px', background: '#0a0d14', borderBottom: '1px solid #1a2030', display: 'flex', alignItems: 'center', padding: '0 20px', gap: '12px' }}>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '16px', padding: '4px' }}>☰</button>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: '#e8eaf0', letterSpacing: '0.01em' }}>Contract Analyzer</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '4px', background: '#111520', border: '1px solid #1a2030', fontSize: '11px', color: '#6b7280', fontFamily: "'JetBrains Mono',monospace" }}>
+            <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e' }}></div>
             Indian Contract Act 1872
           </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-            {result && <button onClick={() => { setState('idle'); setResult(null); setText(''); }} style={{ padding: '6px 14px', borderRadius: '7px', border: '1px solid #1e2535', background: 'none', color: '#9aa3b2', fontSize: '13px', cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}>New Analysis</button>}
+          <div style={{ marginLeft: 'auto' }}>
+            {result && (
+              <button onClick={reset} style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid #1a2030', background: 'none', color: '#9aa3b2', fontSize: '12.5px', cursor: 'pointer', fontFamily: "'Inter',sans-serif", fontWeight: 500 }}>
+                + New Analysis
+              </button>
+            )}
           </div>
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-          <div style={{ maxWidth: '860px', margin: '0 auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 36px' }}>
+          <div style={{ maxWidth: '880px', margin: '0 auto' }}>
 
-            {state === 'idle' || state === 'error' ? (
-              <>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '30px', fontWeight: 300, fontStyle: 'italic', color: '#e8eaf0', marginBottom: '6px' }}>
-                  Analyze any <span style={{ background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>contract</span>
+            {/* ── IDLE / ERROR STATE ── */}
+            {(state === 'idle' || state === 'error') && (
+              <div style={{ animation: 'fadeUp 0.3s ease' }}>
+                <div style={{ marginBottom: '24px' }}>
+                  <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#e8eaf0', marginBottom: '4px', letterSpacing: '-0.02em' }}>
+                    Contract Risk Analysis
+                  </h1>
+                  <p style={{ fontSize: '13.5px', color: '#6b7280', fontWeight: 400 }}>
+                    Upload or paste any Indian contract for AI-powered risk analysis under Indian Contract Act 1872.
+                  </p>
                 </div>
-                <p style={{ fontSize: '14px', color: '#9aa3b2', fontWeight: 300, marginBottom: '28px' }}>Paste contract text for instant AI-powered risk analysis under Indian law.</p>
 
-                {error && <div style={{ padding: '12px 16px', borderRadius: '10px', background: 'rgba(224,82,82,0.08)', border: '1px solid rgba(224,82,82,0.25)', color: '#e05252', fontSize: '13.5px', marginBottom: '16px' }}>⚠ {error}</div>}
+                {error && (
+                  <div style={{ padding: '11px 14px', borderRadius: '8px', background: 'rgba(240,68,68,0.06)', border: '1px solid rgba(240,68,68,0.2)', color: '#f87171', fontSize: '13px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>⚠</span> {error}
+                  </div>
+                )}
 
-                {/* Tabs */}
-                <div style={{ display: 'flex', border: '1px solid #1e2535', borderRadius: '9px', overflow: 'hidden', marginBottom: '20px', width: 'fit-content' }}>
+                {/* Tab Switcher */}
+                <div style={{ display: 'flex', borderBottom: '1px solid #1a2030', marginBottom: '20px', gap: '0' }}>
                   {(['paste', 'upload'] as Tab[]).map(t => (
-                    <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 400, color: tab === t ? '#e8eaf0' : '#9aa3b2', background: tab === t ? '#1a2030' : '#161b28', border: 'none', cursor: 'pointer', fontFamily: "'Outfit',sans-serif", borderRight: t === 'paste' ? '1px solid #1e2535' : 'none' }}>
+                    <button key={t} onClick={() => setTab(t)} className="tab-btn" style={{ padding: '9px 18px', fontSize: '13px', fontWeight: tab === t ? 500 : 400, color: tab === t ? '#e8eaf0' : '#6b7280', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid #c9a84c' : '2px solid transparent', cursor: 'pointer', fontFamily: "'Inter',sans-serif", marginBottom: '-1px', transition: 'color 0.15s' }}>
                       {t === 'paste' ? '📋 Paste Text' : '📎 Upload File'}
                     </button>
                   ))}
                 </div>
 
                 {tab === 'paste' ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Paste your contract text here — NDA, rental agreement, employment contract, MOU, or any legal document…" style={{ width: '100%', minHeight: '260px', background: '#111520', border: '1.5px solid #1e2535', borderRadius: '12px', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", fontSize: '14px', fontWeight: 300, lineHeight: 1.7, padding: '18px 20px', resize: 'vertical', outline: 'none' }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '12px', color: '#4a5568', fontFamily: "'JetBrains Mono',monospace" }}>{text.length} chars</span>
-                      <button onClick={analyze} disabled={text.trim().length < 50} style={{ padding: '12px 32px', borderRadius: '10px', background: text.trim().length >= 50 ? 'linear-gradient(135deg,#c9a84c,#e8c96d)' : '#1e2535', border: 'none', color: text.trim().length >= 50 ? '#000' : '#4a5568', fontSize: '14px', fontWeight: 600, cursor: text.trim().length >= 50 ? 'pointer' : 'not-allowed', fontFamily: "'Outfit',sans-serif" }}>
-                        🔍 Analyze Contract
+                  <div>
+                    <textarea
+                      value={text}
+                      onChange={e => setText(e.target.value)}
+                      placeholder="Paste your contract text here — NDA, rental agreement, employment contract, MOU, or any Indian legal document…"
+                      style={{ width: '100%', minHeight: '280px', background: '#0d1018', border: '1px solid #1a2030', borderRadius: '10px', color: '#d1d5db', fontFamily: "'Inter',sans-serif", fontSize: '13.5px', fontWeight: 400, lineHeight: 1.75, padding: '16px 18px', resize: 'vertical', outline: 'none', transition: 'border-color 0.2s' }}
+                      onFocus={e => e.target.style.borderColor = '#2a3a55'}
+                      onBlur={e => e.target.style.borderColor = '#1a2030'}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                      <span style={{ fontSize: '11.5px', color: '#3a4258', fontFamily: "'JetBrains Mono',monospace" }}>
+                        {text.length.toLocaleString()} characters
+                        {text.length >= 50 && <span style={{ color: '#22c55e', marginLeft: '8px' }}>✓ Ready to analyze</span>}
+                      </span>
+                      <button
+                        onClick={analyze}
+                        disabled={text.trim().length < 50}
+                        style={{ padding: '10px 28px', borderRadius: '8px', background: text.trim().length >= 50 ? 'linear-gradient(135deg,#c9a84c,#e8c96d)' : '#1a2030', border: 'none', color: text.trim().length >= 50 ? '#0d0a04' : '#3a4258', fontSize: '13.5px', fontWeight: 600, cursor: text.trim().length >= 50 ? 'pointer' : 'not-allowed', fontFamily: "'Inter',sans-serif', transition: 'opacity 0.2s" }}
+                      >
+                        Analyze Contract →
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div style={{ border: '1.5px dashed #2a3347', borderRadius: '14px', background: '#111520', padding: '52px 40px', textAlign: 'center', cursor: 'pointer' }}>
-                    <div style={{ width: '58px', height: '58px', background: '#161b28', border: '1px solid #2a3347', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', margin: '0 auto 18px' }}>📄</div>
-                    <div style={{ fontSize: '16px', fontWeight: 400, color: '#e8eaf0', marginBottom: '6px' }}>Drop your contract here</div>
-                    <div style={{ fontSize: '13px', color: '#9aa3b2', marginBottom: '20px' }}>or click to browse files</div>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                      {['PDF', 'DOCX', 'TXT'].map(f => <span key={f} style={{ padding: '4px 12px', borderRadius: '20px', border: '1px solid #1e2535', background: '#161b28', fontSize: '11px', fontFamily: "'JetBrains Mono',monospace", color: '#9aa3b2' }}>{f}</span>)}
+                  <div>
+                    <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleFileInput} style={{ display: 'none' }} />
+                    <div
+                      className="upload-zone"
+                      onDrop={handleDrop}
+                      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                      onDragLeave={() => setDragOver(false)}
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{ border: `1.5px dashed ${dragOver ? '#4a6080' : '#1a2030'}`, borderRadius: '12px', background: dragOver ? '#0f1420' : '#0d1018', padding: '48px 32px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                    >
+                      {uploadedFile ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width: '48px', height: '48px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>📄</div>
+                          <div style={{ fontSize: '14px', fontWeight: 500, color: '#e8eaf0' }}>{uploadedFile.name}</div>
+                          <div style={{ fontSize: '12px', color: '#6b7280' }}>{uploadedFile.size}</div>
+                          <div style={{ fontSize: '12px', color: '#22c55e' }}>✓ File ready</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ width: '52px', height: '52px', background: '#111520', border: '1px solid #1a2030', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>📂</div>
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: 500, color: '#e8eaf0', marginBottom: '4px' }}>Drop contract file here</div>
+                            <div style={{ fontSize: '12.5px', color: '#6b7280' }}>or click to browse — PDF, DOCX, TXT up to 5MB</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {['PDF', 'DOCX', 'TXT'].map(f => (
+                              <span key={f} style={{ padding: '3px 10px', borderRadius: '4px', border: '1px solid #1a2030', background: '#111520', fontSize: '10.5px', fontFamily: "'JetBrains Mono',monospace", color: '#6b7280', fontWeight: 500 }}>{f}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#4a5568', marginTop: '12px' }}>Upload coming soon — use paste tab for now</div>
                   </div>
                 )}
-              </>
-            ) : state === 'analyzing' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', gap: '22px', animation: 'fadeUp 0.4s ease' }}>
-                <div style={{ position: 'relative', width: '70px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(201,168,76,0.2)', animation: 'ring-pulse 1.8s ease-in-out infinite' }}></div>
-                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(201,168,76,0.2)', animation: 'ring-pulse 1.8s ease-in-out 0.6s infinite' }}></div>
-                  <span style={{ fontSize: '30px', animation: 'gavel-swing 1.2s ease-in-out infinite alternate', transformOrigin: 'bottom right', display: 'inline-block' }}>⚖️</span>
-                </div>
-                <div style={{ fontSize: '14px', color: '#9aa3b2', fontWeight: 300 }}>Analyzing under Indian Contract Act 1872…</div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  {[0, 1, 2].map(i => <div key={i} style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#c9a84c', animation: `dot-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}></div>)}
-                </div>
               </div>
-            ) : result ? (
-              <div style={{ animation: 'fadeUp 0.45s ease' }}>
-                {/* Risk Banner */}
-                <div style={{ borderRadius: '14px', padding: '24px 28px', display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '24px', background: riskBg(result.overall_risk), border: `1px solid ${riskColor(result.overall_risk)}40` }}>
-                  <div style={{ padding: '8px 22px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', background: `${riskColor(result.overall_risk)}20`, color: riskColor(result.overall_risk), border: `1px solid ${riskColor(result.overall_risk)}40`, flexShrink: 0 }}>{result.overall_risk} RISK</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontWeight: 400, fontStyle: 'italic', color: '#e8eaf0', marginBottom: '5px' }}>{result.summary?.split('.')[0]}.</div>
-                    <div style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300 }}>{result.red_flags?.length || 0} red flags · {result.missing_clauses?.length || 0} missing clauses</div>
+            )}
+
+            {/* ── ANALYZING STATE ── */}
+            {state === 'analyzing' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '100px 20px', gap: '16px', animation: 'fadeUp 0.3s ease' }}>
+                <div style={{ width: '40px', height: '40px', border: '2px solid #1a2030', borderTop: '2px solid #c9a84c', borderRadius: '50%', animation: 'spin 0.9s linear infinite' }}></div>
+                <div style={{ fontSize: '14px', fontWeight: 500, color: '#9aa3b2' }}>Analyzing contract…</div>
+                <div style={{ fontSize: '12.5px', color: '#3a4258' }}>Running risk analysis under Indian Contract Act 1872</div>
+              </div>
+            )}
+
+            {/* ── RESULTS STATE ── */}
+            {state === 'done' && result && (
+              <div style={{ animation: 'fadeUp 0.35s ease' }}>
+
+                {/* ── RISK HEADER ── */}
+                <div style={{ background: riskBg(result.overall_risk), border: `1px solid ${riskBorder(result.overall_risk)}`, borderRadius: '10px', padding: '20px 24px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+                  <div style={{ flexShrink: 0 }}>
+                    <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6b7280', marginBottom: '6px' }}>Overall Risk</div>
+                    <div style={{ padding: '5px 14px', borderRadius: '5px', background: `${riskColor(result.overall_risk)}15`, border: `1px solid ${riskColor(result.overall_risk)}30`, color: riskColor(result.overall_risk), fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', display: 'inline-block' }}>
+                      {result.overall_risk}
+                    </div>
                   </div>
-                  <div style={{ flexShrink: 0, textAlign: 'center' }}>
-                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '42px', fontWeight: 300, color: riskColor(result.overall_risk), lineHeight: 1 }}>{result.score}</div>
-                    <div style={{ fontSize: '10px', color: '#4a5568', letterSpacing: '1px', textTransform: 'uppercase' }}>Risk Score</div>
+                  <div style={{ width: '1px', height: '40px', background: '#1a2030', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13.5px', color: '#d1d5db', fontWeight: 400, lineHeight: 1.6 }}>{result.summary}</div>
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
+                      <span style={{ fontSize: '11.5px', color: '#f04444' }}>● {result.red_flags?.length || 0} red flags</span>
+                      <span style={{ fontSize: '11.5px', color: '#f59e0b' }}>● {result.missing_clauses?.length || 0} missing clauses</span>
+                      <span style={{ fontSize: '11.5px', color: '#6b7280' }}>● {result.compliance?.length || 0} laws checked</span>
+                    </div>
+                  </div>
+                  <div style={{ flexShrink: 0, textAlign: 'center', padding: '0 8px' }}>
+                    <div style={{ fontSize: '36px', fontWeight: 700, color: riskColor(result.overall_risk), lineHeight: 1, fontFamily: "'JetBrains Mono',monospace" }}>{result.score}</div>
+                    <div style={{ fontSize: '10px', color: '#3a4258', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '3px' }}>Risk Score</div>
                   </div>
                 </div>
 
-                {/* Stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '24px' }}>
+                {/* ── STAT CARDS ── */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
                   {[
-                    { val: result.red_flags?.length || 0, label: 'Red Flags', color: '#e05252' },
-                    { val: result.missing_clauses?.length || 0, label: 'Missing Clauses', color: '#e8a030' },
-                    { val: result.key_terms?.length || 0, label: 'Key Terms', color: '#7eb8f7' },
-                    { val: result.recommendations?.length || 0, label: 'Recommendations', color: '#4caf82' },
+                    { val: result.red_flags?.length || 0, label: 'Red Flags', color: '#f04444', bg: 'rgba(240,68,68,0.06)' },
+                    { val: result.missing_clauses?.length || 0, label: 'Missing Clauses', color: '#f59e0b', bg: 'rgba(245,158,11,0.06)' },
+                    { val: result.key_terms?.length || 0, label: 'Key Terms', color: '#7eb8f7', bg: 'rgba(126,184,247,0.06)' },
+                    { val: result.recommendations?.length || 0, label: 'Recommendations', color: '#22c55e', bg: 'rgba(34,197,94,0.06)' },
                   ].map(stat => (
-                    <div key={stat.label} style={{ background: '#111520', border: '1px solid #1e2535', borderRadius: '12px', padding: '18px 20px' }}>
-                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '32px', fontWeight: 300, color: stat.color, marginBottom: '4px' }}>{stat.val}</div>
-                      <div style={{ fontSize: '11px', color: '#4a5568', letterSpacing: '0.5px' }}>{stat.label}</div>
+                    <div key={stat.label} style={{ background: stat.bg, border: `1px solid ${stat.color}20`, borderRadius: '8px', padding: '14px 16px' }}>
+                      <div style={{ fontSize: '26px', fontWeight: 700, color: stat.color, fontFamily: "'JetBrains Mono',monospace", lineHeight: 1, marginBottom: '5px' }}>{stat.val}</div>
+                      <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, letterSpacing: '0.03em' }}>{stat.label}</div>
                     </div>
                   ))}
                 </div>
 
-                {/* Result Tabs */}
-                <div style={{ display: 'flex', borderBottom: '1px solid #1e2535', marginBottom: '24px', gap: '0' }}>
+                {/* ── RESULT TABS ── */}
+                <div style={{ display: 'flex', borderBottom: '1px solid #1a2030', marginBottom: '16px' }}>
                   {['Red Flags', 'Missing Clauses', 'Key Terms', 'Compliance', 'Recommendations'].map((t, i) => (
-                    <button key={t} onClick={() => setActiveResultTab(i)} className="result-tab" style={{ padding: '10px 18px', fontSize: '13px', background: 'none', border: 'none', borderBottom: activeResultTab === i ? '2px solid #c9a84c' : '2px solid transparent', color: activeResultTab === i ? '#e8c96d' : '#9aa3b2', cursor: 'pointer', fontFamily: "'Outfit',sans-serif", fontWeight: activeResultTab === i ? 500 : 300, marginBottom: '-1px' }}>
+                    <button key={t} onClick={() => setActiveResultTab(i)} className="tab-btn" style={{ padding: '9px 16px', fontSize: '12.5px', background: 'none', border: 'none', borderBottom: activeResultTab === i ? '2px solid #c9a84c' : '2px solid transparent', color: activeResultTab === i ? '#e8c96d' : '#6b7280', cursor: 'pointer', fontFamily: "'Inter',sans-serif", fontWeight: activeResultTab === i ? 600 : 400, marginBottom: '-1px', transition: 'all 0.15s' }}>
                       {t}
+                      {i === 0 && result.red_flags?.length > 0 && (
+                        <span style={{ marginLeft: '6px', padding: '1px 6px', borderRadius: '3px', background: 'rgba(240,68,68,0.12)', color: '#f04444', fontSize: '10px', fontWeight: 700 }}>{result.red_flags.length}</span>
+                      )}
                     </button>
                   ))}
                 </div>
 
-                {/* Tab Content */}
-                <div style={{ background: '#111520', border: '1px solid #1e2535', borderRadius: '14px', overflow: 'hidden' }}>
-                  {activeResultTab === 0 && result.red_flags?.map((flag, i) => (
-                    <div key={i} className="flag-row" style={{ padding: '18px 22px', borderBottom: i < result.red_flags.length - 1 ? '1px solid #1e2535' : 'none', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '10.5px', fontWeight: 500, flexShrink: 0, marginTop: '2px', background: flag.severity === 'HIGH' ? 'rgba(224,82,82,0.1)' : flag.severity === 'MEDIUM' ? 'rgba(232,160,48,0.1)' : 'rgba(76,175,130,0.1)', color: flag.severity === 'HIGH' ? '#e05252' : flag.severity === 'MEDIUM' ? '#e8a030' : '#4caf82', border: `1px solid ${flag.severity === 'HIGH' ? 'rgba(224,82,82,0.25)' : flag.severity === 'MEDIUM' ? 'rgba(232,160,48,0.25)' : 'rgba(76,175,130,0.25)'}` }}>{flag.severity}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 500, color: '#e8eaf0', marginBottom: '4px' }}>{flag.clause}</div>
-                        <div style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300, marginBottom: '6px' }}>{flag.issue}</div>
-                        <div style={{ fontSize: '12.5px', color: '#4caf82', fontWeight: 300 }}>💡 {flag.recommendation}</div>
+                {/* ── TAB CONTENT ── */}
+                <div style={{ background: '#0d1018', border: '1px solid #1a2030', borderRadius: '10px', overflow: 'hidden' }}>
+
+                  {/* Red Flags */}
+                  {activeResultTab === 0 && (
+                    result.red_flags?.length > 0 ? result.red_flags.map((flag, i) => (
+                      <div key={i} className="row-hover" style={{ padding: '16px 20px', borderBottom: i < result.red_flags.length - 1 ? '1px solid #1a2030' : 'none', display: 'flex', gap: '14px', alignItems: 'flex-start', transition: 'background 0.15s' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', flexShrink: 0, marginTop: '3px', background: `${sevColor(flag.severity)}12`, color: sevColor(flag.severity), border: `1px solid ${sevColor(flag.severity)}25` }}>{flag.severity}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#e8eaf0', marginBottom: '4px' }}>{flag.clause}</div>
+                          <div style={{ fontSize: '13px', color: '#9aa3b2', fontWeight: 400, lineHeight: 1.6, marginBottom: '8px' }}>{flag.issue}</div>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '8px 12px', background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.12)', borderRadius: '6px' }}>
+                            <span style={{ color: '#22c55e', fontSize: '11px', marginTop: '1px', flexShrink: 0 }}>→</span>
+                            <span style={{ fontSize: '12.5px', color: '#86efac', fontWeight: 400, lineHeight: 1.55 }}>{flag.recommendation}</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {activeResultTab === 1 && result.missing_clauses?.map((clause, i) => (
-                    <div key={i} style={{ padding: '14px 22px', borderBottom: i < result.missing_clauses.length - 1 ? '1px solid #1e2535' : 'none', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ color: '#e05252', fontSize: '16px' }}>✕</span>
-                      <span style={{ fontSize: '14px', color: '#e8eaf0', fontWeight: 300 }}>{clause}</span>
-                    </div>
-                  ))}
-                  {activeResultTab === 2 && result.key_terms?.map((term, i) => (
-                    <div key={i} style={{ padding: '16px 22px', borderBottom: i < result.key_terms.length - 1 ? '1px solid #1e2535' : 'none' }}>
-                      <div style={{ fontSize: '13px', fontFamily: "'JetBrains Mono',monospace", color: '#7eb8f7', marginBottom: '5px' }}>{term.term}</div>
-                      <div style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300, lineHeight: 1.6 }}>{term.explanation}</div>
-                    </div>
-                  ))}
-                  {activeResultTab === 3 && result.compliance?.map((item, i) => (
-                    <div key={i} style={{ padding: '16px 22px', borderBottom: i < result.compliance.length - 1 ? '1px solid #1e2535' : 'none', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.5px', flexShrink: 0, marginTop: '2px', background: item.status === 'COMPLIANT' ? 'rgba(76,175,130,0.1)' : item.status === 'NON_COMPLIANT' ? 'rgba(224,82,82,0.1)' : 'rgba(232,160,48,0.1)', color: item.status === 'COMPLIANT' ? '#4caf82' : item.status === 'NON_COMPLIANT' ? '#e05252' : '#e8a030', border: `1px solid ${item.status === 'COMPLIANT' ? 'rgba(76,175,130,0.25)' : item.status === 'NON_COMPLIANT' ? 'rgba(224,82,82,0.25)' : 'rgba(232,160,48,0.25)'}` }}>{item.status.replace('_', ' ')}</span>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 500, color: '#e8eaf0', marginBottom: '4px' }}>{item.law}</div>
-                        <div style={{ fontSize: '13.5px', color: '#9aa3b2', fontWeight: 300 }}>{item.note}</div>
+                    )) : (
+                      <div style={{ padding: '32px', textAlign: 'center', color: '#3a4258', fontSize: '13.5px' }}>No red flags identified.</div>
+                    )
+                  )}
+
+                  {/* Missing Clauses */}
+                  {activeResultTab === 1 && (
+                    result.missing_clauses?.length > 0 ? result.missing_clauses.map((clause, i) => (
+                      <div key={i} className="row-hover" style={{ padding: '13px 20px', borderBottom: i < result.missing_clauses.length - 1 ? '1px solid #1a2030' : 'none', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ width: '18px', height: '18px', borderRadius: '4px', background: 'rgba(240,68,68,0.08)', border: '1px solid rgba(240,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#f04444', flexShrink: 0, fontWeight: 700 }}>✕</span>
+                        <span style={{ fontSize: '13.5px', color: '#d1d5db', fontWeight: 400 }}>{clause}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#3a4258', fontStyle: 'italic' }}>Missing</span>
                       </div>
-                    </div>
-                  ))}
-                  {activeResultTab === 4 && result.recommendations?.map((rec, i) => (
-                    <div key={i} style={{ padding: '14px 22px', borderBottom: i < result.recommendations.length - 1 ? '1px solid #1e2535' : 'none', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                      <span style={{ color: '#c9a84c', fontWeight: 600, flexShrink: 0 }}>{i + 1}.</span>
-                      <span style={{ fontSize: '14px', color: '#e8eaf0', fontWeight: 300, lineHeight: 1.65 }}>{rec}</span>
-                    </div>
-                  ))}
+                    )) : (
+                      <div style={{ padding: '32px', textAlign: 'center', color: '#3a4258', fontSize: '13.5px' }}>No missing clauses identified.</div>
+                    )
+                  )}
+
+                  {/* Key Terms */}
+                  {activeResultTab === 2 && (
+                    result.key_terms?.length > 0 ? result.key_terms.map((term, i) => (
+                      <div key={i} className="row-hover" style={{ padding: '14px 20px', borderBottom: i < result.key_terms.length - 1 ? '1px solid #1a2030' : 'none' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                          <span style={{ fontSize: '11px', fontFamily: "'JetBrains Mono',monospace", color: '#7eb8f7', fontWeight: 500, background: 'rgba(126,184,247,0.06)', border: '1px solid rgba(126,184,247,0.15)', padding: '2px 8px', borderRadius: '4px' }}>{term.term}</span>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#9aa3b2', fontWeight: 400, lineHeight: 1.65 }}>{term.explanation}</div>
+                      </div>
+                    )) : (
+                      <div style={{ padding: '32px', textAlign: 'center', color: '#3a4258', fontSize: '13.5px' }}>No key terms identified.</div>
+                    )
+                  )}
+
+                  {/* Compliance */}
+                  {activeResultTab === 3 && (
+                    result.compliance?.length > 0 ? result.compliance.map((item, i) => (
+                      <div key={i} className="row-hover" style={{ padding: '14px 20px', borderBottom: i < result.compliance.length - 1 ? '1px solid #1a2030' : 'none', display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', flexShrink: 0, marginTop: '3px', background: `${statusColor(item.status)}10`, color: statusColor(item.status), border: `1px solid ${statusColor(item.status)}25`, whiteSpace: 'nowrap' }}>
+                          {item.status.replace('_', ' ')}
+                        </span>
+                        <div>
+                          <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#e8eaf0', marginBottom: '4px' }}>{item.law}</div>
+                          <div style={{ fontSize: '13px', color: '#9aa3b2', fontWeight: 400, lineHeight: 1.6 }}>{item.note}</div>
+                        </div>
+                      </div>
+                    )) : (
+                      <div style={{ padding: '32px', textAlign: 'center', color: '#3a4258', fontSize: '13.5px' }}>No compliance data.</div>
+                    )
+                  )}
+
+                  {/* Recommendations */}
+                  {activeResultTab === 4 && (
+                    result.recommendations?.length > 0 ? result.recommendations.map((rec, i) => (
+                      <div key={i} className="row-hover" style={{ padding: '14px 20px', borderBottom: i < result.recommendations.length - 1 ? '1px solid #1a2030' : 'none', display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                        <span style={{ width: '22px', height: '22px', borderRadius: '5px', background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>{i + 1}</span>
+                        <span style={{ fontSize: '13.5px', color: '#d1d5db', fontWeight: 400, lineHeight: 1.65 }}>{rec}</span>
+                      </div>
+                    )) : (
+                      <div style={{ padding: '32px', textAlign: 'center', color: '#3a4258', fontSize: '13.5px' }}>No recommendations.</div>
+                    )
+                  )}
+                </div>
+
+                {/* Footer note */}
+                <div style={{ marginTop: '16px', padding: '10px 14px', borderRadius: '7px', background: '#0d1018', border: '1px solid #1a2030', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px' }}>⚠️</span>
+                  <span style={{ fontSize: '11.5px', color: '#3a4258' }}>This analysis is for informational purposes only. Consult a qualified advocate before taking legal action.</span>
                 </div>
               </div>
-            ) : null}
+            )}
           </div>
         </div>
       </div>
