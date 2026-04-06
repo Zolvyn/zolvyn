@@ -121,7 +121,7 @@ ai-legal-intelligence-system/
 ├── doc_generator.py        ← Phase 3: Legal document generation
 ├── case_predictor.py       ← Phase 4: Case prediction & FIR analysis
 │
-├── data/                   ← Put your legal PDF documents here
+├── data/                   ← Put your legal PDF document here
 ├── vectorstore/            ← Auto-generated FAISS vector DB
 │
 ├── .env                    ← Your API keys (NOT committed to git)
