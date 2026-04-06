@@ -26,13 +26,19 @@ const FAQ = [
   { q: 'Can I try before I pay?', a: 'Absolutely. The Free plan gives you 5 queries per day with no time limit — use it as long as you like before upgrading.' },
 ];
 
-// Name Popup Component
+// Name Popup Component — name is MANDATORY, no skip
 function NamePopup({ onComplete }: { onComplete: (name: string) => void }) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const handleSubmit = async () => {
-    const trimmed = name.trim() || 'User';
+    if (!name.trim()) {
+      setError(true);
+      return;
+    }
+    setError(false);
+    const trimmed = name.trim();
     setLoading(true);
     const user = await createUser(trimmed);
     if (!user) storeUser({ id: crypto.randomUUID(), name: trimmed });
@@ -56,21 +62,24 @@ function NamePopup({ onComplete }: { onComplete: (name: string) => void }) {
           <p style={{ fontSize: '13.5px', color: '#7a8499', fontWeight: 300, lineHeight: 1.65 }}>India's legal intelligence platform. What should we call you?</p>
         </div>
         <input
-          value={name} onChange={e => setName(e.target.value)}
+          value={name}
+          onChange={e => { setName(e.target.value); if (error) setError(false); }}
           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          placeholder="Enter your name…" autoFocus
-          style={{ width: '100%', background: '#111520', border: '1.5px solid #1e2535', borderRadius: '11px', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", fontSize: '15px', fontWeight: 300, padding: '13px 16px', outline: 'none', marginBottom: '12px' }}
+          placeholder="Enter your name…"
+          autoFocus
+          style={{ width: '100%', background: '#111520', border: error ? '1.5px solid #e24b4a' : '1.5px solid #1e2535', borderRadius: '11px', color: '#e8eaf0', fontFamily: "'Outfit',sans-serif", fontSize: '15px', fontWeight: 300, padding: '13px 16px', outline: 'none', marginBottom: error ? '6px' : '12px', transition: 'border-color 0.2s' }}
         />
-        <button onClick={handleSubmit} disabled={loading}
-          style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', color: '#0d0a00', fontSize: '14px', fontWeight: 600, cursor: 'pointer', fontFamily: "'Outfit',sans-serif", marginBottom: '12px' }}>
+        {error && (
+          <p style={{ color: '#e24b4a', fontSize: '12px', marginBottom: '10px', fontFamily: "'Outfit',sans-serif", fontWeight: 300 }}>
+            Please enter your name to continue
+          </p>
+        )}
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg,#c9a84c,#e8c96d)', color: '#0d0a00', fontSize: '14px', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'Outfit',sans-serif", opacity: loading ? 0.8 : 1 }}>
           {loading ? 'Setting up…' : 'Start for free →'}
         </button>
-        <div style={{ textAlign: 'center' }}>
-          <button onClick={() => { storeUser({ id: crypto.randomUUID(), name: 'User' }); onComplete('User'); }}
-            style={{ background: 'none', border: 'none', color: '#4a5568', fontSize: '12.5px', cursor: 'pointer', fontFamily: "'Outfit',sans-serif" }}>
-            Skip for now
-          </button>
-        </div>
         <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid #1e2535', fontSize: '11px', color: '#3a4258', textAlign: 'center' }}>
           No account needed · No password · No spam
         </div>
