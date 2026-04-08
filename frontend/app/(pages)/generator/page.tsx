@@ -29,7 +29,7 @@ const TEMPLATES = [
 type State = 'select' | 'form' | 'generating' | 'done';
 
 export default function GeneratorPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [state, setState] = useState<State>('select');
   const [selected, setSelected] = useState<typeof TEMPLATES[0] | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});

@@ -156,7 +156,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeChips, setActiveChips] = useState(['BNS', 'Constitution']);
   const [userName, setUserName] = useState<string | null>(null);
   const [showNamePopup, setShowNamePopup] = useState(false);

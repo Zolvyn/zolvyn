@@ -63,7 +63,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen }: { sidebarOpen: boolean; setSid
 }
 
 export default function PredictorPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [state, setState] = useState<State>('idle');
   const [caseType, setCaseType] = useState('Criminal');
   const [side, setSide] = useState<'plaintiff' | 'defendant'>('plaintiff');

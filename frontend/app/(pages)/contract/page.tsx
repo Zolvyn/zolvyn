@@ -26,7 +26,7 @@ const NAV = [
 ];
 
 export default function ContractPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('paste');
   const [text, setText] = useState('');
   const [state, setState] = useState<State>('idle');

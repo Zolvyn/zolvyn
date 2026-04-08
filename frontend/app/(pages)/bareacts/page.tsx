@@ -26,7 +26,7 @@ const POPULAR = [
 ];
 
 export default function BareActsPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedAct, setSelectedAct] = useState('All Acts');
   const [streaming, setStreaming] = useState(false);
