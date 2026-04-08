@@ -1,8 +1,8 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
 ║           ZOLVYN AI — FastAPI Backend                       ║
-║           Converted from Streamlit → FastAPI                ║
-║           Groq llama-3.3-70b-versatile                      ║
+║           Groq (primary) → DeepSeek (auto fallback)        ║
+║           llama-3.3-70b-versatile / deepseek-chat           ║
 ╚══════════════════════════════════════════════════════════════╝
 
 Routes:
@@ -29,16 +29,55 @@ load_dotenv()
 
 # ── Groq client ──
 from groq import Groq
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL = "llama-3.3-70b-versatile"
 
-# ── RAG disabled for now (add later) ──
+# ── DeepSeek client (OpenAI-compatible) ──
+from openai import OpenAI
+
+GROQ_MODEL     = "llama-3.3-70b-versatile"
+DEEPSEEK_MODEL = "deepseek-chat"
+
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+deepseek_client = OpenAI(
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com"
+)
+
+def _is_rate_limit(e: Exception) -> bool:
+    """Check if exception is a rate limit / quota error."""
+    s = str(e).lower()
+    return "429" in s or "rate limit" in s or "quota" in s or "too many requests" in s
+
+def call_llm(messages, max_tokens=3000, temperature=0.3, json_mode=False):
+    """
+    Call Groq first. If rate-limited → auto fallback to DeepSeek.
+    Returns a completions response object (same structure from both).
+    """
+    kwargs = dict(messages=messages, max_tokens=max_tokens, temperature=temperature)
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+
+    # ── Try Groq ──
+    try:
+        kwargs["model"] = GROQ_MODEL
+        return groq_client.chat.completions.create(**kwargs)
+    except Exception as e:
+        if _is_rate_limit(e):
+            print("⚡ Groq rate limit hit — switching to DeepSeek automatically")
+        else:
+            raise
+
+    # ── Fallback to DeepSeek ──
+    kwargs["model"] = DEEPSEEK_MODEL
+    return deepseek_client.chat.completions.create(**kwargs)
+
+
+# ── RAG disabled for now ──
 RAG_AVAILABLE = False
 vectorstore = None
 
 app = FastAPI(title="Zolvyn AI Backend", version="2.0.0")
 
-# ── CORS — allow everything ──
+# ── CORS ──
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -49,7 +88,7 @@ app.add_middleware(
 
 
 # ════════════════════════════════════════════════════
-# REQUEST / RESPONSE MODELS
+# REQUEST MODELS
 # ════════════════════════════════════════════════════
 
 class ChatRequest(BaseModel):
@@ -57,7 +96,6 @@ class ChatRequest(BaseModel):
     context_laws: list[str] = ["BNS", "BNSS", "IPC", "Constitution"]
     state: str = "All India"
     history: list[dict] = []
-    # ── FIX: accept max_tokens and system_prompt from frontend ──
     max_tokens: int = 4096
     system_prompt: Optional[str] = None
 
@@ -184,7 +222,6 @@ def get_rag_context(query: str, k: int = 4) -> str:
 async def chat(request: ChatRequest):
     rag_context = get_rag_context(request.question)
 
-    # ── FIX: use frontend system_prompt if provided, else use default ──
     if request.system_prompt:
         system_prompt = request.system_prompt + rag_context
     else:
@@ -198,18 +235,32 @@ async def chat(request: ChatRequest):
         messages.append(msg)
     messages.append({"role": "user", "content": request.question})
 
-    # ── FIX: use max_tokens from frontend (default 4096), cap at model limit ──
     max_tokens = min(request.max_tokens, 8000)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
-            stream = client.chat.completions.create(
-                model=MODEL,
-                messages=messages,
-                max_tokens=max_tokens,   # ── was hardcoded 2048, now dynamic ──
-                temperature=0.3,
-                stream=True,
-            )
+            # ── Try Groq streaming first ──
+            try:
+                stream = groq_client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=0.3,
+                    stream=True,
+                )
+            except Exception as e:
+                if _is_rate_limit(e):
+                    print("⚡ Groq rate limit — switching to DeepSeek for streaming")
+                    stream = deepseek_client.chat.completions.create(
+                        model=DEEPSEEK_MODEL,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=0.3,
+                        stream=True,
+                    )
+                else:
+                    raise
+
             for chunk in stream:
                 delta = chunk.choices[0].delta
                 if delta.content:
@@ -217,6 +268,7 @@ async def chat(request: ChatRequest):
                     yield f"data: {data}\n\n"
                     await asyncio.sleep(0)
             yield f"data: {json.dumps({'done': True})}\n\n"
+
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
@@ -243,10 +295,7 @@ async def analyze_contract(request: ContractRequest):
     ]
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL, messages=messages, max_tokens=3000,
-            temperature=0.1, response_format={"type": "json_object"},
-        )
+        response = call_llm(messages, max_tokens=3000, temperature=0.1, json_mode=True)
         result = json.loads(response.choices[0].message.content)
         return {"status": "success", "data": result}
     except json.JSONDecodeError:
@@ -336,9 +385,7 @@ Requirements:
     ]
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL, messages=messages, max_tokens=4000, temperature=0.2,
-        )
+        response = call_llm(messages, max_tokens=4000, temperature=0.2)
         return {"status": "success", "template": template_name, "document": response.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -362,10 +409,7 @@ Analyze this Indian legal case thoroughly and provide prediction."""
     ]
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL, messages=messages, max_tokens=3000,
-            temperature=0.2, response_format={"type": "json_object"},
-        )
+        response = call_llm(messages, max_tokens=3000, temperature=0.2, json_mode=True)
         result = json.loads(response.choices[0].message.content)
         return {"status": "success", "data": result}
     except json.JSONDecodeError:
@@ -395,11 +439,15 @@ async def predict_from_file(
     if not text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from file.")
 
-    return await predict_case(PredictRequest(case_description=text[:4000], case_type=case_type, side=side))
+    return await predict_case(PredictRequest(
+        case_description=text[:4000],
+        case_type=case_type,
+        side=side
+    ))
 
 
 # ════════════════════════════════════════════════════
-# ROUTE 5 — /api/bare-acts
+# ROUTE 5 — /api/bare-acts  (SSE Streaming)
 # ════════════════════════════════════════════════════
 
 @app.post("/api/bare-acts")
@@ -415,16 +463,35 @@ async def search_bare_acts(request: BareActsRequest):
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
-            stream = client.chat.completions.create(
-                model=MODEL, messages=messages, max_tokens=2000,
-                temperature=0.1, stream=True,
-            )
+            # ── Try Groq streaming first ──
+            try:
+                stream = groq_client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=messages,
+                    max_tokens=2000,
+                    temperature=0.1,
+                    stream=True,
+                )
+            except Exception as e:
+                if _is_rate_limit(e):
+                    print("⚡ Groq rate limit — switching to DeepSeek for streaming")
+                    stream = deepseek_client.chat.completions.create(
+                        model=DEEPSEEK_MODEL,
+                        messages=messages,
+                        max_tokens=2000,
+                        temperature=0.1,
+                        stream=True,
+                    )
+                else:
+                    raise
+
             for chunk in stream:
                 delta = chunk.choices[0].delta
                 if delta.content:
                     yield f"data: {json.dumps({'token': delta.content})}\n\n"
                     await asyncio.sleep(0)
             yield f"data: {json.dumps({'done': True})}\n\n"
+
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
@@ -441,9 +508,14 @@ async def search_bare_acts(request: BareActsRequest):
 
 @app.get("/health")
 async def health():
+    groq_ok = bool(os.getenv("GROQ_API_KEY"))
+    deepseek_ok = bool(os.getenv("DEEPSEEK_API_KEY"))
     return {
         "status": "ok",
-        "model": MODEL,
+        "primary_model": GROQ_MODEL,
+        "fallback_model": DEEPSEEK_MODEL,
+        "groq_key_set": groq_ok,
+        "deepseek_key_set": deepseek_ok,
         "rag_available": RAG_AVAILABLE,
         "routes": ["/api/chat", "/api/contract", "/api/generate", "/api/predict", "/api/bare-acts"]
     }

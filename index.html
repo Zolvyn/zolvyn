@@ -23,9 +23,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 html { scroll-behavior: smooth; }
-
 body {
   background: var(--navy);
   color: var(--text);
@@ -55,7 +53,7 @@ nav {
   align-items: center;
   justify-content: space-between;
   padding: 18px 60px;
-  background: rgba(8,13,24,0.85);
+  background: rgba(8,13,24,0.95);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(201,168,76,0.1);
   transition: all 0.3s ease;
@@ -66,6 +64,7 @@ nav {
   align-items: center;
   gap: 10px;
   text-decoration: none;
+  z-index: 110;
 }
 
 .nav-wordmark {
@@ -87,6 +86,30 @@ nav {
   border-radius: 3px;
   margin-top: -12px;
 }
+
+/* ── HAMBURGER ── */
+.nav-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  z-index: 110;
+  padding: 4px;
+}
+.nav-hamburger span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: var(--gold);
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+.nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-hamburger.open span:nth-child(2) { opacity: 0; }
+.nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
 .nav-links {
   display: flex;
@@ -146,7 +169,6 @@ nav {
   pointer-events: none;
 }
 
-/* Animated grid lines */
 .hero-grid {
   position: absolute;
   inset: 0;
@@ -191,7 +213,7 @@ nav {
 
 .hero-title {
   font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(3rem, 8vw, 6.5rem);
+  font-size: clamp(2.8rem, 8vw, 6.5rem);
   font-weight: 700;
   line-height: 1.0;
   letter-spacing: -1px;
@@ -207,13 +229,14 @@ nav {
 }
 
 .hero-subtitle {
-  font-size: clamp(1rem, 2.5vw, 1.2rem);
+  font-size: clamp(0.95rem, 2.5vw, 1.2rem);
   color: var(--text-dim);
   max-width: 560px;
   margin: 20px auto 44px;
   font-weight: 300;
   line-height: 1.7;
   animation: fadeUp 0.8s ease 0.2s both;
+  padding: 0 8px;
 }
 
 .hero-actions {
@@ -274,6 +297,8 @@ nav {
   padding-top: 40px;
   border-top: 1px solid rgba(201,168,76,0.1);
   animation: fadeUp 0.8s ease 0.4s both;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .hero-stat-num {
@@ -348,7 +373,7 @@ section {
 
 .section-title {
   font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-size: clamp(1.8rem, 5vw, 3.2rem);
   font-weight: 700;
   line-height: 1.1;
   color: var(--text);
@@ -700,6 +725,7 @@ footer {
   display: flex;
   gap: 32px;
   list-style: none;
+  flex-wrap: wrap;
 }
 
 .footer-links a {
@@ -741,15 +767,151 @@ footer {
   transform: translateY(0);
 }
 
-/* ── RESPONSIVE ── */
-@media (max-width: 768px) {
+/* ════════════════════════════════════
+   RESPONSIVE — TABLET (≤ 900px)
+════════════════════════════════════ */
+@media (max-width: 900px) {
   nav { padding: 16px 24px; }
-  .nav-links { display: none; }
-  .features-grid { grid-template-columns: 1fr; }
-  .pricing-grid { grid-template-columns: 1fr; }
-  .hero-stats { gap: 24px; flex-wrap: wrap; justify-content: center; }
-  footer { padding: 40px 24px 24px; }
-  .footer-inner { flex-direction: column; align-items: flex-start; }
+
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .section-inner { padding: 70px 20px; }
+}
+
+/* ════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 768px)
+════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* NAV */
+  nav { padding: 14px 20px; }
+
+  .nav-hamburger { display: flex; }
+
+  .nav-links {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(8,13,24,0.98);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    z-index: 105;
+    backdrop-filter: blur(20px);
+  }
+
+  .nav-links.open { display: flex; }
+
+  .nav-links a {
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+  }
+
+  .nav-cta {
+    padding: 12px 32px !important;
+    font-size: 0.95rem !important;
+  }
+
+  /* HERO */
+  .hero {
+    padding: 100px 20px 70px;
+    min-height: 100svh;
+  }
+
+  .hero-eyebrow {
+    font-size: 0.62rem;
+    letter-spacing: 2px;
+    padding: 6px 14px;
+    margin-bottom: 24px;
+  }
+
+  .hero-title {
+    font-size: clamp(2.4rem, 11vw, 3.5rem);
+    letter-spacing: -0.5px;
+  }
+
+  .hero-subtitle {
+    font-size: 0.95rem;
+    margin: 16px auto 32px;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 12px;
+  }
+
+  .btn-primary, .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 24px;
+  }
+
+  .hero-stats {
+    gap: 20px;
+    margin-top: 50px;
+    padding-top: 30px;
+  }
+
+  .hero-stat-divider { display: none; }
+
+  .hero-stat {
+    flex: 1;
+    min-width: 80px;
+    text-align: center;
+  }
+
+  .hero-stat-num { font-size: 1.6rem; }
+  .hero-stat-label { font-size: 0.62rem; }
+
+  /* FEATURES */
+  .features-grid {
+    grid-template-columns: 1fr;
+    margin-top: 40px;
+  }
+
+  .feature-card { padding: 28px 22px; }
+
+  /* PRICING */
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    margin-top: 40px;
+  }
+
+  .pricing-card { padding: 28px 22px; }
+
+  /* FAQ */
+  .faq-list { margin-top: 40px; }
+  .faq-q-text { font-size: 1rem; }
+
+  /* SECTIONS */
+  .section-inner { padding: 60px 20px; }
+
+  /* CTA */
+  .cta-inner { padding: 60px 20px; }
+
+  /* FOOTER */
+  footer { padding: 36px 20px 24px; }
+  .footer-inner { flex-direction: column; align-items: flex-start; gap: 20px; }
+  .footer-links { gap: 16px; }
+
+  /* SCROLL HINT - hide on mobile */
+  .scroll-hint { display: none; }
+}
+
+/* ════════════════════════════════════
+   RESPONSIVE — SMALL MOBILE (≤ 400px)
+════════════════════════════════════ */
+@media (max-width: 400px) {
+  .hero-title { font-size: 2.2rem; }
+  .nav-wordmark { font-size: 1.3rem; letter-spacing: 2px; }
+  .pricing-price { font-size: 2.4rem; }
 }
 </style>
 </head>
@@ -761,56 +923,56 @@ footer {
     <span class="nav-wordmark">Zolvyn</span>
     <span class="nav-badge">AI</span>
   </a>
-  <ul class="nav-links">
-    <li><a href="#features">Features</a></li>
-    <li><a href="#pricing">Pricing</a></li>
-    <li><a href="#faq">FAQ</a></li>
-    <li><a href="#" class="nav-cta">Try Zolvyn Free →</a></li>
+
+  <!-- Hamburger button (mobile only) -->
+  <div class="nav-hamburger" id="hamburger" onclick="toggleMenu()" aria-label="Toggle menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <ul class="nav-links" id="nav-links">
+    <li><a href="#features" onclick="closeMenu()">Features</a></li>
+    <li><a href="#pricing" onclick="closeMenu()">Pricing</a></li>
+    <li><a href="#faq" onclick="closeMenu()">FAQ</a></li>
+    <li><a href="#" class="nav-cta" onclick="closeMenu()">Try Zolvyn Free →</a></li>
   </ul>
 </nav>
 
 <!-- ── HERO ── -->
 <section class="hero">
   <div class="hero-grid"></div>
-
   <div class="hero-eyebrow">⚖ AI Legal Intelligence for India</div>
-
   <h1 class="hero-title">
     <span class="line1">Know Your Rights.</span>
     <span class="line2">Instantly.</span>
   </h1>
-
   <p class="hero-subtitle">
     Zolvyn AI gives every Indian citizen instant access to legal intelligence —
     without the lawyer fees, without the wait.
   </p>
-
   <div class="hero-actions">
-    <a href="#" class="btn-primary">
-      Try Zolvyn Free →
-    </a>
-    <a href="#features" class="btn-secondary">
-      See how it works ↓
-    </a>
+    <a href="#" class="btn-primary">Try Zolvyn Free →</a>
+    <a href="#features" class="btn-secondary">See how it works ↓</a>
   </div>
 
   <div class="hero-stats">
-    <div>
+    <div class="hero-stat">
       <div class="hero-stat-num">4</div>
       <div class="hero-stat-label">AI Modules</div>
     </div>
     <div class="hero-stat-divider"></div>
-    <div>
+    <div class="hero-stat">
       <div class="hero-stat-num">7+</div>
       <div class="hero-stat-label">Document Types</div>
     </div>
     <div class="hero-stat-divider"></div>
-    <div>
+    <div class="hero-stat">
       <div class="hero-stat-num">100%</div>
       <div class="hero-stat-label">Indian Law Focus</div>
     </div>
     <div class="hero-stat-divider"></div>
-    <div>
+    <div class="hero-stat">
       <div class="hero-stat-num">Free</div>
       <div class="hero-stat-label">To Start</div>
     </div>
@@ -872,7 +1034,6 @@ footer {
     </div>
 
     <div class="pricing-grid reveal">
-
       <!-- FREE -->
       <div class="pricing-card">
         <div class="pricing-plan">Free</div>
@@ -924,7 +1085,6 @@ footer {
         </ul>
         <a href="#" class="btn-plan btn-plan-outline">Contact Us</a>
       </div>
-
     </div>
 
     <p class="reveal" style="text-align:center; margin-top:32px; font-size:0.78rem; color:var(--text-faint);">
@@ -942,7 +1102,6 @@ footer {
     </div>
 
     <div class="faq-list reveal">
-
       <div class="faq-item">
         <div class="faq-q" onclick="toggleFaq(this)">
           <span class="faq-q-text">Is Zolvyn AI a substitute for a real lawyer?</span>
@@ -990,7 +1149,6 @@ footer {
         </div>
         <div class="faq-a">The free plan requires no account — just open the app and start using it. For Pro and Business plans, a simple signup with email is required to manage your subscription.</div>
       </div>
-
     </div>
   </div>
 </section>
@@ -998,65 +1156,75 @@ footer {
 <!-- ── CTA BANNER ── -->
 <section class="cta-section">
   <div class="cta-inner reveal">
-    <h2 class="cta-title">Your rights shouldn't depend<br/>on your <em>budget</em></h2>
-    <p class="cta-sub">Join thousands of Indians using Zolvyn AI to understand, protect, and act on their legal rights.</p>
-    <a href="#" class="btn-primary" style="font-size:1rem; padding:16px 44px;">
-      Try Zolvyn Free →
-    </a>
-    <p style="margin-top:16px; font-size:0.75rem; color:var(--text-faint);">
-      No credit card required &nbsp;·&nbsp; Free forever plan available &nbsp;·&nbsp; Instant access
-    </p>
+    <h2 class="cta-title">Ready to know your<br/><em>legal rights?</em></h2>
+    <p class="cta-sub">Join thousands of Indians who use Zolvyn to navigate the legal system with confidence.</p>
+    <div class="hero-actions" style="margin-top:0;">
+      <a href="#" class="btn-primary">Start Free — No Credit Card →</a>
+    </div>
   </div>
 </section>
 
 <!-- ── FOOTER ── -->
 <footer>
   <div class="footer-inner">
-    <div class="footer-logo">ZOLVYN AI</div>
+    <div class="footer-logo">ZOLVYN</div>
     <ul class="footer-links">
-      <li><a href="#features">Features</a></li>
-      <li><a href="#pricing">Pricing</a></li>
-      <li><a href="#faq">FAQ</a></li>
-      <li><a href="#">Privacy Policy</a></li>
-      <li><a href="#">Terms of Use</a></li>
+      <li><a href="#">Privacy</a></li>
+      <li><a href="#">Terms</a></li>
+      <li><a href="#">Disclaimer</a></li>
+      <li><a href="#">Contact</a></li>
     </ul>
   </div>
   <div class="footer-copy">
-    © 2026 Zolvyn AI &nbsp;·&nbsp; For Educational Use Only &nbsp;·&nbsp; Not a Substitute for Professional Legal Advice
+    © 2025 Zolvyn AI · Built for India · For Educational Use Only · Not a Substitute for Legal Advice
   </div>
 </footer>
 
 <script>
-// ── FAQ Toggle ──
-function toggleFaq(el) {
-  const item = el.parentElement;
-  const isOpen = item.classList.contains('open');
-  document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
-  if (!isOpen) item.classList.add('open');
-}
-
-// ── Scroll Reveal ──
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      entry.target.classList.add('visible');
-    }
-  });
-}, { threshold: 0.12 });
-
-document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
-
-// ── Nav scroll effect ──
-window.addEventListener('scroll', () => {
-  const nav = document.querySelector('nav');
-  if (window.scrollY > 60) {
-    nav.style.background = 'rgba(8,13,24,0.97)';
-    nav.style.borderBottomColor = 'rgba(201,168,76,0.15)';
-  } else {
-    nav.style.background = 'rgba(8,13,24,0.85)';
-    nav.style.borderBottomColor = 'rgba(201,168,76,0.1)';
+  // ── HAMBURGER MENU ──
+  function toggleMenu() {
+    const links = document.getElementById('nav-links');
+    const hamburger = document.getElementById('hamburger');
+    links.classList.toggle('open');
+    hamburger.classList.toggle('open');
+    document.body.style.overflow = links.classList.contains('open') ? 'hidden' : '';
   }
-});
+
+  function closeMenu() {
+    const links = document.getElementById('nav-links');
+    const hamburger = document.getElementById('hamburger');
+    links.classList.remove('open');
+    hamburger.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  // Close menu on outside click
+  document.addEventListener('click', function(e) {
+    const nav = document.querySelector('nav');
+    if (!nav.contains(e.target)) closeMenu();
+  });
+
+  // ── FAQ TOGGLE ──
+  function toggleFaq(el) {
+    const item = el.closest('.faq-item');
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+    if (!isOpen) item.classList.add('open');
+  }
+
+  // ── SCROLL REVEAL ──
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // ── NAV SCROLL EFFECT ──
+  window.addEventListener('scroll', () => {
+    document.querySelector('nav').style.boxShadow =
+      window.scrollY > 50 ? '0 2px 30px rgba(0,0,0,0.4)' : 'none';
+  });
 </script>
+
 </body>
 </html>
